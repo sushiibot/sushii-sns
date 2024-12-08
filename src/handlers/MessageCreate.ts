@@ -2,6 +2,7 @@ import type { Message } from "discord.js";
 import { snsHandler } from "./sns/handler";
 import config from "../config";
 import logger from "../logger";
+import { extractLinksHandler } from "./links/handler";
 
 const log = logger.child({ module: "MessageCreateHandler" });
 
@@ -24,5 +25,5 @@ export async function MessageCreateHandler(msg: Message): Promise<void> {
     msg.reply("pong");
   }
 
-  await snsHandler(msg);
+  await Promise.allSettled([extractLinksHandler(msg), snsHandler(msg)]);
 }

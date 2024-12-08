@@ -1,21 +1,58 @@
 import {
   Attachment,
   AttachmentBuilder,
+  MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
 import type { APIMedia, TweetAPIResponse } from "./fxtweet";
+import { itemsToMessageContents } from "../util";
 
-export type SnsPost<PostMetaData> = {
-  url: string;
-  metadata: PostMetaData;
-};
+export type Platform = "twitter" | "instagram";
 
-export type TwitterMetadata = {
+// Generic interfaces to make the downloader more flexible
+export interface SnsMetadata {
+  // Base interface for platform-specific metadata
+  platform: Platform;
+}
+
+export interface TwitterMetadata extends SnsMetadata {
+  platform: "twitter";
   username: string;
   id: string;
+}
+
+export interface InstagramMetadata extends SnsMetadata {
+  platform: "instagram";
+  username: string;
+  id: string;
+}
+
+export type AnySnsMetadata = TwitterMetadata | InstagramMetadata;
+
+// Define type guard functions for each metadata type
+export function isTwitterMetadata(
+  metadata: AnySnsMetadata
+): metadata is TwitterMetadata {
+  return metadata.platform === "twitter";
+}
+
+export function isInstagramMetadata(
+  metadata: AnySnsMetadata
+): metadata is InstagramMetadata {
+  return metadata.platform === "instagram";
+}
+
+// --------------------------------------------------------------------------
+
+// Enhanced details of a link
+export type SnsLink<M extends SnsMetadata> = {
+  metadata: M;
+  url: string;
 };
 
-export type PostData = {
+// Actual details and files of a post
+export interface PostData<M extends SnsMetadata> {
+  postLink: SnsLink<M>;
   username: string;
   postID: string;
   originalText: string;
@@ -23,7 +60,7 @@ export type PostData = {
   translatedFromLang?: string;
   content: string;
   files: Buffer[];
-};
+}
 
 export function fetchWithHeaders(
   ...args: Parameters<typeof fetch>
@@ -50,29 +87,55 @@ export function fetchWithHeaders(
   return fetch(...args);
 }
 
-abstract class SnsDownloader<SnsDetail> {
+export abstract class SnsDownloader<M extends SnsMetadata> {
   /**
-   * Extract URLs from the given text.
+   * Regular expression to match platform-specific URLs
+   * Implemented by child classes
    */
-  abstract findUrls(content: string): SnsDetail[];
+  protected abstract readonly URL_REGEX: RegExp;
+
+  /**
+   * Extract platform-specific post details from content
+   * @param content Text to search for platform URLs
+   * @returns Array of platform-specific post details
+   */
+  findUrls(content: string): SnsLink<M>[] {
+    const matches = content.matchAll(this.URL_REGEX) ?? [];
+    const results: SnsLink<M>[] = [];
+
+    for (const match of matches) {
+      results.push(this.createLinkFromMatch(match));
+    }
+
+    return results;
+  }
+
+  /**
+   * Abstract method to create a post object from regex match
+   * @param match Regex match result
+   * @returns Platform-specific post object
+   */
+  protected abstract createLinkFromMatch(match: RegExpMatchArray): SnsLink<M>;
 
   /**
    * Build API URL using the extracted details.
    */
-  abstract buildApiUrl(details: SnsDetail): string;
+  abstract buildApiUrl(details: SnsLink<M>): string;
 
   /**
    * Fetch content from the platform's API
    */
-  abstract fetchContent(apiUrl: string): Promise<PostData>;
+  abstract fetchContent(snsLink: SnsLink<M>): Promise<PostData<M>>;
+
+  abstract buildDiscordAttachments(postData: PostData<M>): MessageCreateOptions;
 
   /**
    * Build a Discord message using the fetched content and images.
    */
-  abstract buildDiscordMessage(
-    postData: PostData,
+  abstract buildDiscordMessages(
+    postData: PostData<M>,
     attachmentURLs: string[]
-  ): MessageCreateOptions;
+  ): MessageCreateOptions[];
 
   /**
    * Download images from URLs
@@ -89,8 +152,8 @@ abstract class SnsDownloader<SnsDetail> {
   }
 }
 
-export class TwitterDownloader extends SnsDownloader<SnsPost<TwitterMetadata>> {
-  RE_TWITTER = new RegExp(
+export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
+  URL_REGEX = new RegExp(
     "https?://(?:(?:www|m|mobile)\\.)?" +
       "(?:twitter\\.com|x\\.com)" +
       "/(\\w+)/status/(\\d+)(/(?:photo|video)/\\d)?/?(?:\\?\\S+)?(?:#\\S+)?",
@@ -99,30 +162,27 @@ export class TwitterDownloader extends SnsDownloader<SnsPost<TwitterMetadata>> {
     "ig"
   );
 
-  findUrls(content: string): SnsPost<TwitterMetadata>[] {
-    const matches = content.matchAll(this.RE_TWITTER) ?? [];
-
-    const results = [];
-
-    for (const match of matches) {
-      results.push({
-        url: match[0],
-        metadata: {
-          username: match[1],
-          id: match[2],
-        },
-      });
-    }
-
-    return results;
+  protected createLinkFromMatch(
+    match: RegExpMatchArray
+  ): SnsLink<TwitterMetadata> {
+    return {
+      url: match[0],
+      metadata: {
+        platform: "twitter",
+        username: match[1],
+        id: match[2],
+      },
+    };
   }
 
-  buildApiUrl(details: SnsPost<TwitterMetadata>): string {
+  buildApiUrl(details: SnsLink<TwitterMetadata>): string {
     return `https://api.fxtwitter.com/${details.metadata.username}/status/${details.metadata.id}/en`;
   }
 
-  async fetchContent(apiUrl: string): Promise<PostData> {
-    const response = await fetchWithHeaders(apiUrl);
+  async fetchContent(
+    snsLink: SnsLink<TwitterMetadata>
+  ): Promise<PostData<TwitterMetadata>> {
+    const response = await fetchWithHeaders(snsLink.url);
     const tweetRes: TweetAPIResponse = await response.json();
 
     if (tweetRes.code !== 200) {
@@ -135,12 +195,13 @@ export class TwitterDownloader extends SnsDownloader<SnsPost<TwitterMetadata>> {
 
     const media = tweetRes.tweet.media.all?.map((m) => ({
       ...m,
-      url: origPhotoUrl(m),
+      url: this.origTwitterPhotoUrl(m),
     }));
 
     const files = await this.downloadImages(media?.map((m) => m.url) ?? []);
 
     return {
+      postLink: snsLink,
       username: tweetRes.tweet.author.screen_name,
       postID: tweetRes.tweet.id,
       originalText: tweetRes.tweet.text,
@@ -151,7 +212,10 @@ export class TwitterDownloader extends SnsDownloader<SnsPost<TwitterMetadata>> {
     };
   }
 
-  buildDiscordAttachments(postData: PostData): MessageCreateOptions {
+  // Needs to be separate so we can get the Discord attachment URLs
+  buildDiscordAttachments(
+    postData: PostData<TwitterMetadata>
+  ): MessageCreateOptions {
     const attachments = postData.files.map((image, i) =>
       new AttachmentBuilder(image)
         .setName(`twitter-${postData.username}-${postData.postID}-${i}.jpg`)
@@ -159,52 +223,48 @@ export class TwitterDownloader extends SnsDownloader<SnsPost<TwitterMetadata>> {
     );
 
     return {
-      content:
-        "PLS DON'T DELETE ME 😭🙏‼️ " +
-        "This msg got the IMAGES LINKED below ⬇️ " +
-        "and might get YOINKED for other places 🤔👀",
+      content: "PLS DON'T DELETE ME 😭🙏!! or it will break the image links",
       files: attachments,
     };
   }
 
-  buildDiscordMessage(
-    postData: PostData,
+  buildDiscordMessages(
+    postData: PostData<TwitterMetadata>,
     attachmentURLs: string[]
-  ): MessageCreateOptions {
-    let content = "";
-    content += "### Original\n";
-    content += "```\n";
-    content += postData.originalText;
-    content += "\n```";
+  ): MessageCreateOptions[] {
+    let msgs: MessageCreateOptions[] = [];
 
+    let textContent;
     if (postData.translatedText) {
-      content += "\n";
-
-      if (postData.translatedFromLang) {
-        content += `### Translated from: ${postData.translatedFromLang}\n`;
-      } else {
-        content += "### Translated\n";
-      }
-
-      content += "```\n";
-      content += postData.translatedText;
-      content += "\n```";
+      textContent = postData.translatedText;
+    } else {
+      textContent = postData.originalText;
     }
 
-    if (attachmentURLs.length > 0) {
-      content += "\n";
-      content += "### Images\n";
-      content += "```\n";
-      content += attachmentURLs.join("\n");
-      content += "\n```";
+    textContent += "\n\n";
+    textContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
+    textContent += "\n";
+
+    // Translated or original text
+    msgs.push({
+      content: textContent,
+      flags: MessageFlags.SuppressEmbeds,
+    });
+
+    // Image URLs can be span multiple messages
+    const imageUrlsChunks = itemsToMessageContents(attachmentURLs);
+    for (const chunk of imageUrlsChunks) {
+      msgs.push({
+        content: chunk,
+        // Prevent embeds
+        flags: MessageFlags.SuppressEmbeds,
+      });
     }
 
-    return {
-      content: content,
-    };
+    return msgs;
   }
-}
 
-function origPhotoUrl(media: APIMedia): string {
-  return `${media.url}?name=orig`;
+  private origTwitterPhotoUrl(media: APIMedia): string {
+    return `${media.url}?name=orig`;
+  }
 }

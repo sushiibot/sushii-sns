@@ -4,21 +4,41 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import {
+  isInstagramMetadata,
+  isTwitterMetadata,
+  SnsDownloader,
   TwitterDownloader,
+  type AnySnsMetadata,
+  type InstagramMetadata,
   type PostData,
-  type SnsPost,
+  type SnsLink,
+  type SnsMetadata,
   type TwitterMetadata,
 } from "./twitter";
 import logger from "../../logger";
 
-const twitterPlatform = new TwitterDownloader();
+const log = logger.child({ module: "snsHandler" });
+
+const twitterPlatform: SnsDownloader<TwitterMetadata> = new TwitterDownloader();
+
+function getPlatform(metadata: AnySnsMetadata): SnsDownloader<AnySnsMetadata> {
+  if (isTwitterMetadata(metadata)) {
+    return twitterPlatform as SnsDownloader<TwitterMetadata>;
+    // } else if (isInstagramMetadata(metadata)) {
+    // Assuming you have an InstagramDownloader instance
+    // return instagramPlatform as SnsDownloader<InstagramMetadata>;
+  } else {
+    throw new Error(`Unsupported platform: ${metadata}`);
+  }
+}
 
 async function* snsService(
-  posts: SnsPost<TwitterMetadata>[]
-): AsyncGenerator<PostData> {
-  for (const details of posts) {
-    const apiUrl = twitterPlatform.buildApiUrl(details);
-    const content = await twitterPlatform.fetchContent(apiUrl);
+  snsLinks: SnsLink<TwitterMetadata>[]
+): AsyncGenerator<PostData<AnySnsMetadata>> {
+  for (const snsLink of snsLinks) {
+    const platform = getPlatform(snsLink.metadata);
+
+    const content = await platform.fetchContent(snsLink);
 
     // Generator yields the message
     yield content;
@@ -30,9 +50,23 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     return;
   }
 
+  if (!msg.content.startsWith("dl")) {
+    return;
+  }
+
+  log.debug(
+    { requester: msg.author.username, content: msg.content },
+    "Processing sns message"
+  );
+
   const posts = twitterPlatform.findUrls(msg.content);
 
   if (posts.length === 0) {
+    log.debug(
+      { requester: msg.author.username, content: msg.content },
+      "No sns posts found"
+    );
+
     return;
   }
 
@@ -46,16 +80,23 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
 
   try {
     for await (const postData of snsService(posts)) {
+      const platform = getPlatform(postData.postLink.metadata);
+
       // 1. Send images first
       // 2. Get the links to images
       // 3. Send the message with the links
-      const filesMsgOpts = twitterPlatform.buildDiscordAttachments(postData);
+      const filesMsgOpts = platform.buildDiscordAttachments(postData);
       const filesMsg = await msg.channel.send(filesMsgOpts);
 
       const links = filesMsg.attachments.map((attachment) => attachment.url);
-      const postMsg = twitterPlatform.buildDiscordMessage(postData, links);
+      const msgs = platform.buildDiscordMessages(postData, links);
 
-      await msg.channel.send(postMsg);
+      for (const postMsg of msgs) {
+        await msg.reply({
+          ...postMsg,
+          allowedMentions: { parse: [] },
+        });
+      }
     }
   } catch (err) {
     logger.error(err, "failed to process sns message");
