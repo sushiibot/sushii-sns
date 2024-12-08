@@ -6,6 +6,9 @@ import {
 } from "discord.js";
 import type { APIMedia, TweetAPIResponse } from "./fxtweet";
 import { itemsToMessageContents } from "../util";
+import logger from "../../logger";
+
+const log = logger.child({ module: "snsHandler" });
 
 export type Platform = "twitter" | "instagram";
 
@@ -182,8 +185,22 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   async fetchContent(
     snsLink: SnsLink<TwitterMetadata>
   ): Promise<PostData<TwitterMetadata>> {
-    const response = await fetchWithHeaders(snsLink.url);
-    const tweetRes: TweetAPIResponse = await response.json();
+    const apiURL = this.buildApiUrl(snsLink);
+    const response = await fetchWithHeaders(apiURL);
+
+    let tweetRes: TweetAPIResponse;
+    try {
+      tweetRes = await response.json();
+    } catch (err) {
+      log.error(
+        {
+          err,
+          apiURL,
+        },
+        "Failed to parse tweet API response from"
+      );
+      throw new Error("Failed to parse tweet JSON response");
+    }
 
     if (tweetRes.code !== 200) {
       throw new Error("Failed to fetch tweet: " + tweetRes.message);

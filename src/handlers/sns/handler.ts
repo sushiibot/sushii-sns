@@ -4,8 +4,6 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import {
-  isInstagramMetadata,
-  isTwitterMetadata,
   SnsDownloader,
   TwitterDownloader,
   type AnySnsMetadata,
@@ -21,14 +19,16 @@ const log = logger.child({ module: "snsHandler" });
 
 const twitterPlatform: SnsDownloader<TwitterMetadata> = new TwitterDownloader();
 
-function getPlatform(metadata: AnySnsMetadata): SnsDownloader<AnySnsMetadata> {
-  if (isTwitterMetadata(metadata)) {
-    return twitterPlatform as SnsDownloader<TwitterMetadata>;
-    // } else if (isInstagramMetadata(metadata)) {
-    // Assuming you have an InstagramDownloader instance
-    // return instagramPlatform as SnsDownloader<InstagramMetadata>;
-  } else {
-    throw new Error(`Unsupported platform: ${metadata}`);
+function getPlatform<M extends SnsMetadata>(
+  metadata: M
+): SnsDownloader<AnySnsMetadata> {
+  switch (metadata.platform) {
+    case "twitter":
+      return twitterPlatform;
+    case "instagram":
+      throw new Error("Instagram not supported yet");
+    default:
+      throw new Error(`Unsupported platform: ${metadata.platform}`);
   }
 }
 
