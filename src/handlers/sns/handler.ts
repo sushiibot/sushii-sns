@@ -4,6 +4,7 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import {
+  InstagramPostDownloader,
   SnsDownloader,
   TwitterDownloader,
   type AnySnsMetadata,
@@ -17,23 +18,33 @@ import logger from "../../logger";
 
 const log = logger.child({ module: "snsHandler" });
 
-const twitterPlatform: SnsDownloader<TwitterMetadata> = new TwitterDownloader();
+const twitterDownloader: SnsDownloader<TwitterMetadata> =
+  new TwitterDownloader();
+const instagramDownloader: SnsDownloader<InstagramMetadata> =
+  new InstagramPostDownloader();
+
+function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
+  const twitterLinks = twitterDownloader.findUrls(content);
+  const instagramLinks = instagramDownloader.findUrls(content);
+
+  return [...twitterLinks, ...instagramLinks];
+}
 
 function getPlatform<M extends SnsMetadata>(
   metadata: M
 ): SnsDownloader<AnySnsMetadata> {
   switch (metadata.platform) {
     case "twitter":
-      return twitterPlatform;
+      return twitterDownloader;
     case "instagram":
-      throw new Error("Instagram not supported yet");
+      return instagramDownloader;
     default:
       throw new Error(`Unsupported platform: ${metadata.platform}`);
   }
 }
 
 async function* snsService(
-  snsLinks: SnsLink<TwitterMetadata>[]
+  snsLinks: SnsLink<AnySnsMetadata>[]
 ): AsyncGenerator<PostData<AnySnsMetadata>> {
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
@@ -59,7 +70,7 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     "Processing sns message"
   );
 
-  const posts = twitterPlatform.findUrls(msg.content);
+  const posts = findAllSnsLinks(msg.content);
 
   if (posts.length === 0) {
     log.debug(

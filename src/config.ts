@@ -9,6 +9,8 @@ const schema = z.object({
   DISCORD_TOKEN: z.string(),
   APPLICATION_ID: z.string(),
 
+  BD_API_TOKEN: z.string(),
+
   CHANNEL_ID_WHITELIST: z
     .string()
     .transform((s) => s.split(",").map((s) => s.trim()))
