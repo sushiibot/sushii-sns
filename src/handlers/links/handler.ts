@@ -44,7 +44,10 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
   }
 
   // Group attachments into list of strings max 2000 characters
-  const msgs = itemsToMessageContents(refMsg.attachments.map((a) => a.url));
+  const msgs = itemsToMessageContents(
+    "",
+    refMsg.attachments.map((a) => a.url)
+  );
 
   log.debug(
     {

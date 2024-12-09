@@ -15,6 +15,7 @@ import {
   type TwitterMetadata,
 } from "./twitter";
 import logger from "../../logger";
+import { sleep } from "bun";
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -44,12 +45,13 @@ function getPlatform<M extends SnsMetadata>(
 }
 
 async function* snsService(
-  snsLinks: SnsLink<AnySnsMetadata>[]
+  snsLinks: SnsLink<AnySnsMetadata>[],
+  processFn?: (content: string) => Promise<void>
 ): AsyncGenerator<PostData<AnySnsMetadata>> {
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
 
-    const content = await platform.fetchContent(snsLink);
+    const content = await platform.fetchContent(snsLink, processFn);
 
     // Generator yields the message
     yield content;
@@ -89,8 +91,18 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     msg.channel.sendTyping(),
   ]).catch((err) => logger.error(err, "failed to suppress/react/type"));
 
+  const progressUpdater = async (content: string) => {
+    try {
+      const progressMsg = await msg.channel.send(content);
+      await sleep(5000);
+      await progressMsg.delete();
+    } catch (err) {
+      logger.error(err, "failed to send sns progress update message");
+    }
+  };
+
   try {
-    for await (const postData of snsService(posts)) {
+    for await (const postData of snsService(posts, progressUpdater)) {
       const platform = getPlatform(postData.postLink.metadata);
 
       // 1. Send images first

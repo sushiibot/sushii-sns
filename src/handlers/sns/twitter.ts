@@ -20,6 +20,7 @@ import {
   type BdTriggerResponse,
 } from "./bd";
 import { sleep } from "bun";
+import { EventEmitter } from "events";
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -158,7 +159,10 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
   /**
    * Fetch content from the platform's API
    */
-  abstract fetchContent(snsLink: SnsLink<M>): Promise<PostData<M>>;
+  abstract fetchContent(
+    snsLink: SnsLink<M>,
+    progressCallback?: (message: string) => Promise<void>
+  ): Promise<PostData<M>>;
 
   abstract buildDiscordAttachments(postData: PostData<M>): MessageCreateOptions;
 
@@ -286,7 +290,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     );
 
     return {
-      content: "PLS DON'T DELETE ME 😭🙏!! or it will break the image links",
+      content: "PLS DON'T DELETE ME !!! or it will break the image links",
       files: attachments,
     };
   }
@@ -295,8 +299,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     postData: PostData<TwitterMetadata>,
     attachmentURLs: string[]
   ): MessageCreateOptions[] {
-    let msgs: MessageCreateOptions[] = [];
-
+    // Translated or original text
     let textContent;
     if (postData.translatedText) {
       textContent = postData.translatedText;
@@ -308,23 +311,14 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     textContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
     textContent += "\n";
 
-    // Translated or original text
-    msgs.push({
-      content: textContent,
-      flags: MessageFlags.SuppressEmbeds,
-    });
-
     // Image URLs can be span multiple messages
-    const imageUrlsChunks = itemsToMessageContents(attachmentURLs);
-    for (const chunk of imageUrlsChunks) {
-      msgs.push({
-        content: chunk,
-        // Prevent embeds
-        flags: MessageFlags.SuppressEmbeds,
-      });
-    }
+    const imageUrlsChunks = itemsToMessageContents(textContent, attachmentURLs);
 
-    return msgs;
+    return imageUrlsChunks.map((chunk) => ({
+      content: chunk,
+      // Prevent embeds
+      flags: MessageFlags.SuppressEmbeds,
+    }));
   }
 
   private origTwitterPhotoUrl(media: APIMedia): string {
@@ -482,7 +476,8 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   }
 
   async fetchContent(
-    snsLink: SnsLink<InstagramMetadata>
+    snsLink: SnsLink<InstagramMetadata>,
+    progressCallback?: (message: string) => Promise<void>
   ): Promise<PostData<InstagramMetadata>> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetch(req);
@@ -526,6 +521,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     // --------------------------------------------------------------------------
     // Wait for process trigger and download the data
 
+    progressCallback?.("Waiting for IG data...");
     log.debug(
       {
         snapshotID: triggerResponse.snapshot_id,
@@ -540,6 +536,8 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       },
       "IG API processed the post, downloading data..."
     );
+
+    progressCallback?.("Downloading images...");
 
     const igPost = await this.fetchSnapshotData(triggerResponse.snapshot_id);
 
@@ -601,7 +599,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     );
 
     return {
-      content: "PLS DON'T DELETE ME 😭🙏!! or it will break the image links",
+      content: "PLS DON'T DELETE ME !!! or it will break the image links",
       files: attachments,
     };
   }
@@ -610,8 +608,6 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     postData: PostData<InstagramMetadata>,
     attachmentURLs: string[]
   ): MessageCreateOptions[] {
-    let msgs: MessageCreateOptions[] = [];
-
     // No translation for ig
     let textContent = postData.originalText;
 
@@ -619,22 +615,13 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     textContent += `<${postData.postLink.url}>`;
     textContent += "\n";
 
-    // Translated or original text
-    msgs.push({
-      content: textContent,
-      flags: MessageFlags.SuppressEmbeds,
-    });
-
     // Image URLs can be span multiple messages
-    const imageUrlsChunks = itemsToMessageContents(attachmentURLs);
-    for (const chunk of imageUrlsChunks) {
-      msgs.push({
-        content: chunk,
-        // Prevent embeds
-        flags: MessageFlags.SuppressEmbeds,
-      });
-    }
+    const msgChunks = itemsToMessageContents(textContent, attachmentURLs);
 
-    return msgs;
+    return msgChunks.map((chunk) => ({
+      content: chunk,
+      // Prevent embeds
+      flags: MessageFlags.SuppressEmbeds,
+    }));
   }
 }
