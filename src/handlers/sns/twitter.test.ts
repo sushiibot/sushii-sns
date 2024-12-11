@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { getFileExtFromURL, InstagramPostDownloader } from "./twitter";
+import {
+  formatDiscordTitle,
+  getFileExtFromURL,
+  InstagramPostDownloader,
+  type Platform,
+} from "./twitter";
 
 describe("twitter", () => {
   describe("waitUntilDataReady", async () => {
@@ -34,6 +39,55 @@ describe("twitter", () => {
       const url = "https://example.com/image";
       const ext = getFileExtFromURL(url);
       expect(ext).toBe("jpg");
+    });
+
+    describe("formatDiscordTitle", () => {
+      it("should format title with date", () => {
+        const platform: Platform = "twitter";
+        const username = "testuser";
+        const date = new Date("2023-10-01");
+        const title = formatDiscordTitle(platform, username, date);
+        expect(title).toBe("`231001 testuser Twitter Update`");
+      });
+
+      it("should format title with date in KST timezone", () => {
+        const platform: Platform = "twitter";
+        const username = "testuser";
+        // UTC timezone 4pm
+        const date = new Date("2023-10-01T16:00:00Z");
+        const title = formatDiscordTitle(platform, username, date);
+
+        // Next day vs UTC
+        expect(title).toBe("`231002 testuser Twitter Update`");
+      });
+
+      it("should format title without date", () => {
+        const platform: Platform = "instagram";
+        const username = "testuser";
+        const title = formatDiscordTitle(platform, username);
+        expect(title).toBe("`testuser Instagram Update`");
+      });
+
+      it("should capitalize platform name", () => {
+        const platform: Platform = "twitter";
+        const username = "testuser";
+        const title = formatDiscordTitle(platform, username);
+        expect(title).toBe("`testuser Twitter Update`");
+      });
+
+      it("should handle empty username", () => {
+        const platform: Platform = "instagram";
+        const username = "";
+        const title = formatDiscordTitle(platform, username);
+        expect(title).toBe("` Instagram Update`");
+      });
+
+      it("should handle undefined date", () => {
+        const platform: Platform = "twitter";
+        const username = "testuser";
+        const title = formatDiscordTitle(platform, username, undefined);
+        expect(title).toBe("`testuser Twitter Update`");
+      });
     });
   });
 });

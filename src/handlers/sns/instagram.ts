@@ -77,7 +77,7 @@ export const InstagramPostElementSchema = z.object({
   post_content: z.array(PostContentSchema).optional(),
   // audio: AudioSchema.optional(),
   // profile_url: z.string().optional(),
-  // timestamp: z.coerce.date().optional(),
+  timestamp: z.coerce.date().optional(),
 });
 
 export type InstagramPostElement = z.infer<typeof InstagramPostElementSchema>;

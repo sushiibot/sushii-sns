@@ -21,6 +21,12 @@ import {
 } from "./bd";
 import { sleep } from "bun";
 import { EventEmitter } from "events";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -78,6 +84,7 @@ export interface PostData<M extends SnsMetadata> {
   originalText: string;
   translatedText?: string;
   translatedFromLang?: string;
+  timestamp?: Date;
   files: File[];
 }
 
@@ -112,6 +119,28 @@ export function getFileExtFromURL(url: string): string {
 
   return ext;
 }
+
+export function formatDiscordTitle(
+  platform: Platform,
+  username: string,
+  date?: Date
+): string {
+  const djs = dayjs(date).tz("Asia/Seoul");
+
+  let title = "`";
+  if (date) {
+    title += djs.format("YYMMDD");
+    title += " ";
+  }
+
+  const platformName = platform[0].toUpperCase() + platform.slice(1);
+  title += `${username} ${platformName} Update`;
+  title += "`";
+
+  return title;
+}
+
+export type ProgressFn = (message: string, done?: boolean) => Promise<void>;
 
 export abstract class SnsDownloader<M extends SnsMetadata> {
   /**
@@ -161,7 +190,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
    */
   abstract fetchContent(
     snsLink: SnsLink<M>,
-    progressCallback?: (message: string) => Promise<void>
+    progressCallback?: ProgressFn
   ): Promise<PostData<M>>;
 
   abstract buildDiscordAttachments(postData: PostData<M>): MessageCreateOptions;
@@ -273,6 +302,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
       originalText: tweetRes.tweet.text,
       translatedText: tweetRes.tweet.translation?.text,
       translatedFromLang: tweetRes.tweet.translation?.source_lang_en,
+      timestamp: new Date(tweetRes.tweet.created_timestamp * 1000),
       files,
     };
   }
@@ -308,6 +338,13 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     }
 
     textContent += "\n\n";
+
+    textContent += formatDiscordTitle(
+      "twitter",
+      postData.username,
+      postData.timestamp
+    );
+    textContent += "\n";
     textContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
     textContent += "\n";
 
@@ -477,7 +514,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
   async fetchContent(
     snsLink: SnsLink<InstagramMetadata>,
-    progressCallback?: (message: string) => Promise<void>
+    progressCallback?: ProgressFn
   ): Promise<PostData<InstagramMetadata>> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetch(req);
@@ -576,6 +613,8 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       };
     });
 
+    progressCallback?.("Downloaded!", true);
+
     return {
       postLink: {
         ...snsLink,
@@ -584,6 +623,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       username: igPost.user_posted || "Unknown user",
       postID: igPost.post_id || "Unknown ID",
       originalText: igPost.description || "",
+      timestamp: igPost.timestamp,
       files,
     };
   }
@@ -611,6 +651,13 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     // No translation for ig
     let textContent = postData.originalText;
 
+    textContent += "\n";
+
+    textContent += formatDiscordTitle(
+      "instagram",
+      postData.username,
+      postData.timestamp
+    );
     textContent += "\n";
     textContent += `<${postData.postLink.url}>`;
     textContent += "\n";

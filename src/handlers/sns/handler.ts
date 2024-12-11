@@ -10,6 +10,7 @@ import {
   type AnySnsMetadata,
   type InstagramMetadata,
   type PostData,
+  type ProgressFn,
   type SnsLink,
   type SnsMetadata,
   type TwitterMetadata,
@@ -46,7 +47,7 @@ function getPlatform<M extends SnsMetadata>(
 
 async function* snsService(
   snsLinks: SnsLink<AnySnsMetadata>[],
-  processFn?: (content: string) => Promise<void>
+  processFn?: ProgressFn
 ): AsyncGenerator<PostData<AnySnsMetadata>> {
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
@@ -91,11 +92,23 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     msg.channel.sendTyping(),
   ]).catch((err) => logger.error(err, "failed to suppress/react/type"));
 
-  const progressUpdater = async (content: string) => {
+  let progressMsg: Message | null = null;
+  const progressUpdater = async (content: string, done?: boolean) => {
     try {
-      const progressMsg = await msg.channel.send(content);
-      await sleep(5000);
-      await progressMsg.delete();
+      // Delete when done
+      if (done && progressMsg) {
+        await progressMsg.delete();
+        return;
+      }
+
+      // Edit if exists
+      if (progressMsg) {
+        await progressMsg.edit(content);
+        return;
+      }
+
+      // Send if not exists
+      progressMsg = await msg.channel.send(content);
     } catch (err) {
       logger.error(err, "failed to send sns progress update message");
     }
