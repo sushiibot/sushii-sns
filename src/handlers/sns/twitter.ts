@@ -329,33 +329,48 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     postData: PostData<TwitterMetadata>,
     attachmentURLs: string[]
   ): MessageCreateOptions[] {
+    let msgs: MessageCreateOptions[] = [];
+
     // Translated or original text
-    let textContent;
+    let originalPostContent;
     if (postData.translatedText) {
-      textContent = postData.translatedText;
+      originalPostContent = postData.translatedText;
     } else {
-      textContent = postData.originalText;
+      originalPostContent = postData.originalText;
     }
 
-    textContent += "\n\n";
+    if (originalPostContent) {
+      msgs.push({
+        content: originalPostContent,
+        flags: MessageFlags.SuppressEmbeds,
+      });
+    }
 
-    textContent += formatDiscordTitle(
+    // Formatted post
+    let mainPostContent = "";
+    mainPostContent += formatDiscordTitle(
       "twitter",
       postData.username,
       postData.timestamp
     );
-    textContent += "\n";
-    textContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
-    textContent += "\n";
+    mainPostContent += "\n";
+    mainPostContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
+    mainPostContent += "\n";
 
     // Image URLs can be span multiple messages
-    const imageUrlsChunks = itemsToMessageContents(textContent, attachmentURLs);
+    const imageUrlsChunks = itemsToMessageContents(
+      mainPostContent,
+      attachmentURLs
+    );
 
-    return imageUrlsChunks.map((chunk) => ({
+    const imageMsgs: MessageCreateOptions[] = imageUrlsChunks.map((chunk) => ({
       content: chunk,
       // Prevent embeds
       flags: MessageFlags.SuppressEmbeds,
     }));
+
+    msgs.push(...imageMsgs);
+    return msgs;
   }
 
   private origTwitterPhotoUrl(media: APIMedia): string {
@@ -648,27 +663,39 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     postData: PostData<InstagramMetadata>,
     attachmentURLs: string[]
   ): MessageCreateOptions[] {
-    // No translation for ig
-    let textContent = postData.originalText;
+    let msgs: MessageCreateOptions[] = [];
 
-    textContent += "\n";
+    // No translation for ig -- only if not empty
+    if (postData.originalText) {
+      msgs.push({
+        content: postData.originalText,
+        flags: MessageFlags.SuppressEmbeds,
+      });
+    }
 
-    textContent += formatDiscordTitle(
+    let mainPostContent = "";
+    mainPostContent += formatDiscordTitle(
       "instagram",
       postData.username,
       postData.timestamp
     );
-    textContent += "\n";
-    textContent += `<${postData.postLink.url}>`;
-    textContent += "\n";
+    mainPostContent += "\n";
+    mainPostContent += `<${postData.postLink.url}>`;
+    mainPostContent += "\n";
 
     // Image URLs can be span multiple messages
-    const msgChunks = itemsToMessageContents(textContent, attachmentURLs);
+    const msgChunkContents = itemsToMessageContents(
+      mainPostContent,
+      attachmentURLs
+    );
 
-    return msgChunks.map((chunk) => ({
+    const msgChunks: MessageCreateOptions[] = msgChunkContents.map((chunk) => ({
       content: chunk,
       // Prevent embeds
       flags: MessageFlags.SuppressEmbeds,
     }));
+
+    msgs.push(...msgChunks);
+    return msgs;
   }
 }
