@@ -5,7 +5,7 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import type { APIMedia, TweetAPIResponse } from "./fxtweet";
-import { itemsToMessageContents } from "../util";
+import { chunkArray, itemsToMessageContents } from "../util";
 import logger from "../../logger";
 import {
   InstagramPostElementSchema,
@@ -29,6 +29,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const log = logger.child({ module: "snsHandler" });
+
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 export type Platform = "twitter" | "instagram";
 
@@ -193,7 +195,9 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
     progressCallback?: ProgressFn
   ): Promise<PostData<M>>;
 
-  abstract buildDiscordAttachments(postData: PostData<M>): MessageCreateOptions;
+  abstract buildDiscordAttachments(
+    postData: PostData<M>
+  ): MessageCreateOptions[];
 
   /**
    * Build a Discord message using the fetched content and images.
@@ -310,19 +314,26 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   // Needs to be separate so we can get the Discord attachment URLs
   buildDiscordAttachments(
     postData: PostData<TwitterMetadata>
-  ): MessageCreateOptions {
+  ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
       new AttachmentBuilder(file.buffer)
         .setName(
-          `twitter-${postData.username}-${postData.postID}-${i}.${file.ext}`
+          `twitter-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
         )
-        .setDescription(`${postData.username} - ${postData.postID} - ${i}`)
+        .setDescription(`${postData.username} - ${postData.postID} - ${i + 1}`)
     );
 
-    return {
-      content: "PLS DON'T DELETE ME !!! or it will break the image links",
-      files: attachments,
-    };
+    const attachmentsChunks = chunkArray(
+      attachments,
+      MAX_ATTACHMENTS_PER_MESSAGE
+    );
+
+    return attachmentsChunks.map((chunk) => {
+      return {
+        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        files: chunk,
+      };
+    });
   }
 
   buildDiscordMessages(
@@ -646,17 +657,27 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   // Needs to be separate so we can get the Discord attachment URLs
   buildDiscordAttachments(
     postData: PostData<InstagramMetadata>
-  ): MessageCreateOptions {
+  ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
       new AttachmentBuilder(file.buffer)
-        .setName(`ig-${postData.username}-${postData.postID}-${i}.${file.ext}`)
+        .setName(
+          `ig-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
+        )
         .setDescription(`${postData.username} - ${postData.postID} - ${i + 1}`)
     );
 
-    return {
-      content: "PLS DON'T DELETE ME !!! or it will break the image links",
-      files: attachments,
-    };
+    // Groups of 10
+    const attachmentsChunks = chunkArray(
+      attachments,
+      MAX_ATTACHMENTS_PER_MESSAGE
+    );
+
+    return attachmentsChunks.map((chunk) => {
+      return {
+        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        files: chunk,
+      };
+    });
   }
 
   buildDiscordMessages(

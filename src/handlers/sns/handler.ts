@@ -1,4 +1,5 @@
 import {
+  Attachment,
   managerToFetchingStrategyOptions,
   type Message,
   type MessageCreateOptions,
@@ -121,10 +122,16 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
       // 1. Send images first
       // 2. Get the links to images
       // 3. Send the message with the links
-      const filesMsgOpts = platform.buildDiscordAttachments(postData);
-      const filesMsg = await msg.channel.send(filesMsgOpts);
+      const fileMsgs = platform.buildDiscordAttachments(postData);
 
-      const links = filesMsg.attachments.map((attachment) => attachment.url);
+      const attachments: Attachment[] = [];
+
+      for (const fileMsg of fileMsgs) {
+        const filesMsg = await msg.channel.send(fileMsg);
+        attachments.push(...filesMsg.attachments.values());
+      }
+
+      const links = attachments.map((attachment) => attachment.url);
       const msgs = platform.buildDiscordMessages(postData, links);
 
       for (const postMsg of msgs) {
@@ -136,9 +143,10 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     }
   } catch (err) {
     logger.error(err, "failed to process sns message");
+    let errMsg =
+      "oops borked the download try again or go download it urself lol sorry 💀";
+    errMsg += "\n\n<@150443906511667200> pls fix\n";
 
-    await msg.channel.send(
-      "oops borked the download try again or go download it urself lol sorry 💀"
-    );
+    await msg.channel.send(errMsg);
   }
 }
