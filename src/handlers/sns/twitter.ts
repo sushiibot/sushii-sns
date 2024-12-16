@@ -316,11 +316,9 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     postData: PostData<TwitterMetadata>
   ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
-      new AttachmentBuilder(file.buffer)
-        .setName(
-          `twitter-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
-        )
-        .setDescription(`${postData.username} - ${postData.postID} - ${i + 1}`)
+      new AttachmentBuilder(file.buffer).setName(
+        `twitter-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
+      )
     );
 
     const attachmentsChunks = chunkArray(
@@ -659,11 +657,9 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     postData: PostData<InstagramMetadata>
   ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
-      new AttachmentBuilder(file.buffer)
-        .setName(
-          `ig-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
-        )
-        .setDescription(`${postData.username} - ${postData.postID} - ${i + 1}`)
+      new AttachmentBuilder(file.buffer).setName(
+        `ig-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
+      )
     );
 
     // Groups of 10
