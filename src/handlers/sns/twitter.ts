@@ -340,21 +340,6 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   ): MessageCreateOptions[] {
     let msgs: MessageCreateOptions[] = [];
 
-    // Translated or original text
-    let originalPostContent;
-    if (postData.translatedText) {
-      originalPostContent = postData.translatedText;
-    } else {
-      originalPostContent = postData.originalText;
-    }
-
-    if (originalPostContent) {
-      msgs.push({
-        content: originalPostContent,
-        flags: MessageFlags.SuppressEmbeds,
-      });
-    }
-
     // Formatted post
     let mainPostContent = "";
     mainPostContent += formatDiscordTitle(
@@ -389,7 +374,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
 
 export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\/?(?:\?\S+)?/gi
+    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\//gi
   );
 
   protected createLinkFromMatch(
@@ -681,14 +666,6 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     attachmentURLs: string[]
   ): MessageCreateOptions[] {
     let msgs: MessageCreateOptions[] = [];
-
-    // No translation for ig -- only if not empty
-    if (postData.originalText) {
-      msgs.push({
-        content: postData.originalText,
-        flags: MessageFlags.SuppressEmbeds,
-      });
-    }
 
     let mainPostContent = "";
     mainPostContent += formatDiscordTitle(
