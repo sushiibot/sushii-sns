@@ -1,6 +1,6 @@
 // Require the necessary discord.js classes
 import { Client, Events, GatewayIntentBits, Status } from "discord.js";
-import config from "./config";
+import config from "./config/config";
 import { MessageCreateHandler } from "./handlers/MessageCreate";
 import logger from "./logger";
 import { Hono } from "hono";

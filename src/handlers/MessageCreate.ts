@@ -1,6 +1,6 @@
 import type { Message } from "discord.js";
 import { snsHandler } from "./sns/handler";
-import config from "../config";
+import config from "../config/config";
 import logger from "../logger";
 import { extractLinksHandler } from "./links/handler";
 

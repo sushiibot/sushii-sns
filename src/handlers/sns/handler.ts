@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import {
   InstagramPostDownloader,
+  InstagramStoryDownloader,
   SnsDownloader,
   TwitterDownloader,
   type AnySnsMetadata,
@@ -25,12 +26,15 @@ const twitterDownloader: SnsDownloader<TwitterMetadata> =
   new TwitterDownloader();
 const instagramDownloader: SnsDownloader<InstagramMetadata> =
   new InstagramPostDownloader();
+const instagramStoryDownloader: SnsDownloader<InstagramMetadata> =
+  new InstagramStoryDownloader();
 
 function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
   const twitterLinks = twitterDownloader.findUrls(content);
   const instagramLinks = instagramDownloader.findUrls(content);
+  const instagramStoryLinks = instagramStoryDownloader.findUrls(content);
 
-  return [...twitterLinks, ...instagramLinks];
+  return [...twitterLinks, ...instagramLinks, ...instagramStoryLinks];
 }
 
 function getPlatform<M extends SnsMetadata>(
@@ -41,6 +45,8 @@ function getPlatform<M extends SnsMetadata>(
       return twitterDownloader;
     case "instagram":
       return instagramDownloader;
+    case "instagram-story":
+      return instagramStoryDownloader;
     default:
       throw new Error(`Unsupported platform: ${metadata.platform}`);
   }
@@ -49,7 +55,7 @@ function getPlatform<M extends SnsMetadata>(
 async function* snsService(
   snsLinks: SnsLink<AnySnsMetadata>[],
   processFn?: ProgressFn
-): AsyncGenerator<PostData<AnySnsMetadata>> {
+): AsyncGenerator<PostData<AnySnsMetadata>[]> {
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
 
@@ -116,29 +122,31 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
   };
 
   try {
-    for await (const postData of snsService(posts, progressUpdater)) {
-      const platform = getPlatform(postData.postLink.metadata);
+    for await (const postDatas of snsService(posts, progressUpdater)) {
+      for (const postData of postDatas) {
+        const platform = getPlatform(postData.postLink.metadata);
 
-      // 1. Send images first
-      // 2. Get the links to images
-      // 3. Send the message with the links
-      const fileMsgs = platform.buildDiscordAttachments(postData);
+        // 1. Send images first
+        // 2. Get the links to images
+        // 3. Send the message with the links
+        const fileMsgs = platform.buildDiscordAttachments(postData);
 
-      const attachments: Attachment[] = [];
+        const attachments: Attachment[] = [];
 
-      for (const fileMsg of fileMsgs) {
-        const filesMsg = await msg.channel.send(fileMsg);
-        attachments.push(...filesMsg.attachments.values());
-      }
+        for (const fileMsg of fileMsgs) {
+          const filesMsg = await msg.channel.send(fileMsg);
+          attachments.push(...filesMsg.attachments.values());
+        }
 
-      const links = attachments.map((attachment) => attachment.url);
-      const msgs = platform.buildDiscordMessages(postData, links);
+        const links = attachments.map((attachment) => attachment.url);
+        const msgs = platform.buildDiscordMessages(postData, links);
 
-      for (const postMsg of msgs) {
-        await msg.reply({
-          ...postMsg,
-          allowedMentions: { parse: [] },
-        });
+        for (const postMsg of msgs) {
+          await msg.reply({
+            ...postMsg,
+            allowedMentions: { parse: [] },
+          });
+        }
       }
     }
   } catch (err) {

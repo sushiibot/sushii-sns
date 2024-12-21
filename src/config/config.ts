@@ -10,6 +10,7 @@ const schema = z.object({
   APPLICATION_ID: z.string(),
 
   BD_API_TOKEN: z.string(),
+  RAPID_API_KEY: z.string(),
 
   CHANNEL_ID_WHITELIST: z
     .string()
