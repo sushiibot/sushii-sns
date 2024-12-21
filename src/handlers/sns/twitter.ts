@@ -706,7 +706,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
 export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\//gi
+    /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi
   );
 
   protected createLinkFromMatch(
@@ -822,8 +822,9 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
         storiesDay.urls.push(item.video_url);
       }
 
-      // Otherwise thumbnail image. Video stories also have thumbnail images
-      if (item.thumbnail_url) {
+      // Otherwise thumbnail image. Video stories also have thumbnail images,
+      // so only if video URL is missing
+      if (!item.video_url && item.thumbnail_url) {
         storiesDay.urls.push(item.thumbnail_url);
       }
 
