@@ -5,10 +5,7 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import {
-  InstagramPostDownloader,
-  InstagramStoryDownloader,
   SnsDownloader,
-  TwitterDownloader,
   type AnySnsMetadata,
   type InstagramMetadata,
   type PostData,
@@ -16,9 +13,12 @@ import {
   type SnsLink,
   type SnsMetadata,
   type TwitterMetadata,
-} from "./twitter";
+} from "./downloaders/base";
 import logger from "../../logger";
 import { sleep } from "bun";
+import { TwitterDownloader } from "./downloaders/twitter";
+import { InstagramPostDownloader } from "./downloaders/instagramPost";
+import { InstagramStoryDownloader } from "./downloaders/instagramStory";
 
 const log = logger.child({ module: "snsHandler" });
 
