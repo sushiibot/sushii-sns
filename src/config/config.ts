@@ -1,6 +1,6 @@
-import { z } from "zod";
 import * as dotenv from "dotenv";
 import pino from "pino";
+import { z } from "zod";
 
 dotenv.config();
 

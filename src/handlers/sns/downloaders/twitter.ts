@@ -1,11 +1,11 @@
 import {
-  Attachment,
   AttachmentBuilder,
   MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
-import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
+import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
+import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
 import {
   SnsDownloader,
   type PostData,
@@ -18,7 +18,6 @@ import {
   getFileExtFromURL,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from "./util";
-import logger from "../../../logger";
 
 const log = logger.child({ module: "TwitterDownloader" });
 

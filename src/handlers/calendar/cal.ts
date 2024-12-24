@@ -1,8 +1,8 @@
 // src/commands.ts
-import { Message } from "discord.js";
-import type { Event, Calendar } from "./types";
-import { formatCalendarMessage } from "./utils";
 import { randomUUID } from "crypto";
+import { Message } from "discord.js";
+import type { Calendar, Event } from "./types";
+import { formatCalendarMessage } from "./utils";
 
 export async function handleNewCalendar(
   message: Message,

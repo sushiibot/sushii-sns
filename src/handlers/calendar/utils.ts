@@ -1,5 +1,4 @@
 // src/utils.ts
-import { randomUUID } from "crypto";
 import type { Event } from "./types";
 
 export function parseCommand(content: string): {

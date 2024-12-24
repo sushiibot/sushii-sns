@@ -1,10 +1,10 @@
 // Require the necessary discord.js classes
+import type { Server } from "bun";
 import { Client, Events, GatewayIntentBits, Status } from "discord.js";
+import { Hono } from "hono";
 import config from "./config/config";
 import { MessageCreateHandler } from "./handlers/MessageCreate";
 import logger from "./logger";
-import { Hono } from "hono";
-import type { Server } from "bun";
 
 const log = logger.child({ module: "bot" });
 

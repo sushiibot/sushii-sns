@@ -1,9 +1,5 @@
-import {
-  Attachment,
-  managerToFetchingStrategyOptions,
-  type Message,
-  type MessageCreateOptions,
-} from "discord.js";
+import { Attachment, type Message } from "discord.js";
+import logger from "../../logger";
 import {
   SnsDownloader,
   type AnySnsMetadata,
@@ -14,11 +10,9 @@ import {
   type SnsMetadata,
   type TwitterMetadata,
 } from "./downloaders/base";
-import logger from "../../logger";
-import { sleep } from "bun";
-import { TwitterDownloader } from "./downloaders/twitter";
 import { InstagramPostDownloader } from "./downloaders/instagramPost";
 import { InstagramStoryDownloader } from "./downloaders/instagramStory";
+import { TwitterDownloader } from "./downloaders/twitter";
 
 const log = logger.child({ module: "snsHandler" });
 

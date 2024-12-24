@@ -1,41 +1,26 @@
+import dayjs from "dayjs";
 import {
-  Attachment,
   AttachmentBuilder,
   MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
-import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
+import config from "../../../config/config";
+import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
+import { IgStoriesSchema, type IgStories } from "../igStories";
 import {
   SnsDownloader,
   type InstagramMetadata,
   type PostData,
   type ProgressFn,
   type SnsLink,
-  type TwitterMetadata,
 } from "./base";
 import {
-  fetchWithHeaders,
   formatDiscordTitle,
   getFileExtFromURL,
   KST_TIMEZONE,
   MAX_ATTACHMENTS_PER_MESSAGE,
 } from "./util";
-import logger from "../../../logger";
-import config from "../../../config/config";
-import {
-  BdMonitorResponseSchema,
-  BdTriggerResponseSchema,
-  type BdMonitorResponse,
-  type BdTriggerResponse,
-} from "../bd";
-import { sleep } from "bun";
-import {
-  InstagramPostListSchema,
-  type InstagramPostElement,
-} from "../instagram";
-import { IgStoriesSchema, type IgStories } from "../igStories";
-import dayjs from "dayjs";
 
 const log = logger.child({ module: "InstagramStoryDownloader" });
 

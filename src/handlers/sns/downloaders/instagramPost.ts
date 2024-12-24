@@ -1,38 +1,34 @@
+import { sleep } from "bun";
 import {
-  Attachment,
   AttachmentBuilder,
   MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
-import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
-import { chunkArray, itemsToMessageContents } from "../../util";
-import {
-  SnsDownloader,
-  type InstagramMetadata,
-  type PostData,
-  type ProgressFn,
-  type SnsLink,
-  type TwitterMetadata,
-} from "./base";
-import {
-  fetchWithHeaders,
-  formatDiscordTitle,
-  getFileExtFromURL,
-  MAX_ATTACHMENTS_PER_MESSAGE,
-} from "./util";
-import logger from "../../../logger";
 import config from "../../../config/config";
+import logger from "../../../logger";
+import { chunkArray, itemsToMessageContents } from "../../util";
 import {
   BdMonitorResponseSchema,
   BdTriggerResponseSchema,
   type BdMonitorResponse,
   type BdTriggerResponse,
 } from "../bd";
-import { sleep } from "bun";
 import {
   InstagramPostListSchema,
   type InstagramPostElement,
 } from "../instagram";
+import {
+  SnsDownloader,
+  type InstagramMetadata,
+  type PostData,
+  type ProgressFn,
+  type SnsLink,
+} from "./base";
+import {
+  formatDiscordTitle,
+  getFileExtFromURL,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+} from "./util";
 
 const log = logger.child({ module: "InstagramPostDownloader" });
 

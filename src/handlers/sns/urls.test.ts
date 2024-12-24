@@ -1,5 +1,5 @@
-import { extractTwitterURLs } from "./urls";
 import { describe, expect, it } from "bun:test";
+import { extractTwitterURLs } from "./urls";
 
 describe("sns", () => {
   describe("extractTwitterURLs", () => {
