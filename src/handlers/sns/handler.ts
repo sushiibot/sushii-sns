@@ -38,7 +38,7 @@ function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
 }
 
 function getPlatform<M extends SnsMetadata>(
-  metadata: M
+  metadata: M,
 ): SnsDownloader<AnySnsMetadata> {
   switch (metadata.platform) {
     case "twitter":
@@ -54,7 +54,7 @@ function getPlatform<M extends SnsMetadata>(
 
 async function* snsService(
   snsLinks: SnsLink<AnySnsMetadata>[],
-  processFn?: ProgressFn
+  processFn?: ProgressFn,
 ): AsyncGenerator<PostData<AnySnsMetadata>[]> {
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
@@ -77,7 +77,7 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
 
   log.debug(
     { requester: msg.author.username, content: msg.content },
-    "Processing sns message"
+    "Processing sns message",
   );
 
   const posts = findAllSnsLinks(msg.content);
@@ -85,7 +85,7 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
   if (posts.length === 0) {
     log.debug(
       { requester: msg.author.username, content: msg.content },
-      "No sns posts found"
+      "No sns posts found",
     );
 
     return;

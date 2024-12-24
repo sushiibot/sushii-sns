@@ -15,7 +15,7 @@ export function fetchWithHeaders(
   const headers = new Headers(args[1]?.headers);
   headers.set(
     "User-Agent",
-    "Private social media downloader Discord bot: https://github.com/sushiibot/sushii-sns"
+    "Private social media downloader Discord bot: https://github.com/sushiibot/sushii-sns",
   );
 
   // Append to existing headers
@@ -44,7 +44,7 @@ export function getFileExtFromURL(url: string): string {
 export function formatDiscordTitle(
   platform: Platform,
   username: string,
-  date?: Date
+  date?: Date,
 ): string {
   const djs = dayjs(date).tz(KST_TIMEZONE);
 

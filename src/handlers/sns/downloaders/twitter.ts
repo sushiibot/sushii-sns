@@ -29,11 +29,11 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
       "/(\\w+)/status/(\\d+)(/(?:photo|video)/\\d)?/?(?:\\?\\S+)?(?:#\\S+)?",
     // 'i' flag for case-insensitivity
     // 'g' flag for global search - makes String.match() exclude capture groups
-    "ig"
+    "ig",
   );
 
   protected createLinkFromMatch(
-    match: RegExpMatchArray
+    match: RegExpMatchArray,
   ): SnsLink<TwitterMetadata> {
     return {
       url: match[0],
@@ -53,12 +53,12 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
           "User-Agent":
             "Private social media downloader Discord bot: https://github.com/sushiibot/sushii-sns",
         },
-      }
+      },
     );
   }
 
   async fetchContent(
-    snsLink: SnsLink<TwitterMetadata>
+    snsLink: SnsLink<TwitterMetadata>,
   ): Promise<PostData<TwitterMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetchWithHeaders(req);
@@ -72,7 +72,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
           err,
           req,
         },
-        "Failed to parse tweet API response from"
+        "Failed to parse tweet API response from",
       );
       throw new Error("Failed to parse tweet JSON response");
     }
@@ -115,17 +115,17 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
 
   // Needs to be separate so we can get the Discord attachment URLs
   buildDiscordAttachments(
-    postData: PostData<TwitterMetadata>
+    postData: PostData<TwitterMetadata>,
   ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
       new AttachmentBuilder(file.buffer).setName(
-        `twitter-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
-      )
+        `twitter-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`,
+      ),
     );
 
     const attachmentsChunks = chunkArray(
       attachments,
-      MAX_ATTACHMENTS_PER_MESSAGE
+      MAX_ATTACHMENTS_PER_MESSAGE,
     );
 
     return attachmentsChunks.map((chunk) => {
@@ -138,7 +138,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
 
   buildDiscordMessages(
     postData: PostData<TwitterMetadata>,
-    attachmentURLs: string[]
+    attachmentURLs: string[],
   ): MessageCreateOptions[] {
     let msgs: MessageCreateOptions[] = [];
 
@@ -147,7 +147,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     mainPostContent += formatDiscordTitle(
       "twitter",
       postData.username,
-      postData.timestamp
+      postData.timestamp,
     );
     mainPostContent += "\n";
     mainPostContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
@@ -156,7 +156,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     // Image URLs can be span multiple messages
     const imageUrlsChunks = itemsToMessageContents(
       mainPostContent,
-      attachmentURLs
+      attachmentURLs,
     );
 
     const imageMsgs: MessageCreateOptions[] = imageUrlsChunks.map((chunk) => ({

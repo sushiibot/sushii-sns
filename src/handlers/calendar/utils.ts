@@ -27,7 +27,7 @@ export function formatCalendarMessage(events: Event[]): string {
   }
 
   const sortedEvents = filteredEvents.sort(
-    (a, b) => a.date.getTime() - b.date.getTime()
+    (a, b) => a.date.getTime() - b.date.getTime(),
   );
 
   let message = "📅 Events this month:\n\n";

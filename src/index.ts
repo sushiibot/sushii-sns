@@ -9,7 +9,7 @@ import type { Server } from "bun";
 const log = logger.child({ module: "bot" });
 
 async function startHealthCheckServer(
-  healthyFn: () => boolean
+  healthyFn: () => boolean,
 ): Promise<Server> {
   const app = new Hono();
 
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
         DISCORD_TOKEN: "********",
       },
     },
-    "Starting bot with config"
+    "Starting bot with config",
   );
 
   const client = new Client({

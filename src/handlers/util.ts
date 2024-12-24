@@ -2,7 +2,7 @@
 // length of 2000 characters
 export function itemsToMessageContents(
   initialMsg: string,
-  items: string[]
+  items: string[],
 ): string[] {
   const msgs = [];
   let currentMsg = initialMsg;

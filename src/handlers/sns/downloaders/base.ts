@@ -25,13 +25,13 @@ export type AnySnsMetadata = TwitterMetadata | InstagramMetadata;
 
 // Define type guard functions for each metadata type
 export function isTwitterMetadata(
-  metadata: AnySnsMetadata
+  metadata: AnySnsMetadata,
 ): metadata is TwitterMetadata {
   return metadata.platform === "twitter";
 }
 
 export function isInstagramMetadata(
-  metadata: AnySnsMetadata
+  metadata: AnySnsMetadata,
 ): metadata is InstagramMetadata {
   return (
     metadata.platform === "instagram" || metadata.platform === "instagram-story"
@@ -90,7 +90,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
         content,
         results,
       },
-      "Finding URLs in content"
+      "Finding URLs in content",
     );
 
     return results;
@@ -113,11 +113,11 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
    */
   abstract fetchContent(
     snsLink: SnsLink<M>,
-    progressCallback?: ProgressFn
+    progressCallback?: ProgressFn,
   ): Promise<PostData<M>[]>;
 
   abstract buildDiscordAttachments(
-    postData: PostData<M>
+    postData: PostData<M>,
   ): MessageCreateOptions[];
 
   /**
@@ -125,7 +125,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
    */
   abstract buildDiscordMessages(
     postData: PostData<M>,
-    attachmentURLs: string[]
+    attachmentURLs: string[],
   ): MessageCreateOptions[];
 
   /**

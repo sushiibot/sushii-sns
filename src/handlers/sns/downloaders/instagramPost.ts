@@ -38,11 +38,11 @@ const log = logger.child({ module: "InstagramPostDownloader" });
 
 export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\//gi
+    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\//gi,
   );
 
   protected createLinkFromMatch(
-    match: RegExpMatchArray
+    match: RegExpMatchArray,
   ): SnsLink<InstagramMetadata> {
     return {
       url: match[0],
@@ -62,7 +62,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           Authorization: `Bearer ${config.BD_API_TOKEN}`,
         },
         body: JSON.stringify([{ url: details.url }]),
-      }
+      },
     );
   }
 
@@ -73,7 +73,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         headers: {
           Authorization: `Bearer ${config.BD_API_TOKEN}`,
         },
-      }
+      },
     );
 
     // set time to cancel by, 10 seconds later
@@ -92,7 +92,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
               responseCode: res.status,
               responseBody: await res.text(),
             },
-            "Failed to fetch ig API snapshot response"
+            "Failed to fetch ig API snapshot response",
           );
 
           throw new Error("Failed to fetch ig API response");
@@ -110,7 +110,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
             responseCode: res.status,
             responseBody: await res.text(),
           },
-          "Failed to fetch ig API snapshot response"
+          "Failed to fetch ig API snapshot response",
         );
 
         throw new Error("Failed to fetch ig API response");
@@ -124,7 +124,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           {
             resParsed,
           },
-          "IG API failed to process the post"
+          "IG API failed to process the post",
         );
 
         throw new Error("IG API failed to process the post");
@@ -144,7 +144,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         headers: {
           Authorization: `Bearer ${config.BD_API_TOKEN}`,
         },
-      }
+      },
     );
 
     const response = await fetch(req);
@@ -155,7 +155,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           responseCode: response.status,
           responseBody: await response.text(),
         },
-        "Failed to fetch ig API snapshot response"
+        "Failed to fetch ig API snapshot response",
       );
 
       throw new Error("Failed to fetch ig API response");
@@ -178,7 +178,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           response,
           responseCode: response.status,
         },
-        "Failed to parse ig API snapshot response"
+        "Failed to parse ig API snapshot response",
       );
 
       throw err;
@@ -187,7 +187,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
   async fetchContent(
     snsLink: SnsLink<InstagramMetadata>,
-    progressCallback?: ProgressFn
+    progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetch(req);
@@ -199,7 +199,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           responseCode: response.status,
           responseBody: await response.text(),
         },
-        "Failed to fetch ig API response"
+        "Failed to fetch ig API response",
       );
 
       throw new Error("Failed to fetch ig API response");
@@ -218,7 +218,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           response,
           responseCode: response.status,
         },
-        "Failed to parse ig trigger API response"
+        "Failed to parse ig trigger API response",
       );
 
       throw new Error("Failed to parse ig JSON response");
@@ -236,7 +236,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         snapshotID: triggerResponse.snapshot_id,
       },
-      "Waiting for IG API to process the post"
+      "Waiting for IG API to process the post",
     );
     await this.waitUntilDataReady(triggerResponse.snapshot_id);
 
@@ -244,7 +244,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         snapshotID: triggerResponse.snapshot_id,
       },
-      "IG API processed the post, downloading data..."
+      "IG API processed the post, downloading data...",
     );
 
     progressCallback?.("Downloading images...");
@@ -255,7 +255,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         response: igPost,
       },
-      "Downloaded and parsed IG API response"
+      "Downloaded and parsed IG API response",
     );
 
     if (!igPost.post_content) {
@@ -274,7 +274,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         mediaUrls: mediaUrls.length,
       },
-      "Downloading media URLs"
+      "Downloading media URLs",
     );
 
     const buffers = await this.downloadImages(mediaUrls);
@@ -305,18 +305,18 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
   // Needs to be separate so we can get the Discord attachment URLs
   buildDiscordAttachments(
-    postData: PostData<InstagramMetadata>
+    postData: PostData<InstagramMetadata>,
   ): MessageCreateOptions[] {
     const attachments = postData.files.map((file, i) =>
       new AttachmentBuilder(file.buffer).setName(
-        `ig-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`
-      )
+        `ig-${postData.username}-${postData.postID}-${i + 1}.${file.ext}`,
+      ),
     );
 
     // Groups of 10
     const attachmentsChunks = chunkArray(
       attachments,
-      MAX_ATTACHMENTS_PER_MESSAGE
+      MAX_ATTACHMENTS_PER_MESSAGE,
     );
 
     return attachmentsChunks.map((chunk) => {
@@ -329,7 +329,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
   buildDiscordMessages(
     postData: PostData<InstagramMetadata>,
-    attachmentURLs: string[]
+    attachmentURLs: string[],
   ): MessageCreateOptions[] {
     let msgs: MessageCreateOptions[] = [];
 
@@ -337,7 +337,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     mainPostContent += formatDiscordTitle(
       "instagram",
       postData.username,
-      postData.timestamp
+      postData.timestamp,
     );
     mainPostContent += "\n";
     mainPostContent += `<${postData.postLink.url}>`;
@@ -346,7 +346,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     // Image URLs can be span multiple messages
     const msgChunkContents = itemsToMessageContents(
       mainPostContent,
-      attachmentURLs
+      attachmentURLs,
     );
 
     const msgChunks: MessageCreateOptions[] = msgChunkContents.map((chunk) => ({

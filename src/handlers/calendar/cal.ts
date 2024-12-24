@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 
 export async function handleNewCalendar(
   message: Message,
-  calendars: Map<string, Calendar>
+  calendars: Map<string, Calendar>,
 ) {
   const channel = message.mentions.channels.first();
   if (!channel) {
@@ -20,7 +20,7 @@ export async function handleNewCalendar(
   }
 
   const calendarMessage = await channel.send(
-    "📅 No events scheduled for this month."
+    "📅 No events scheduled for this month.",
   );
 
   calendars.set(channel.id, {
@@ -35,7 +35,7 @@ export async function handleNewCalendar(
 export async function handleNewEvent(
   message: Message,
   args: string[],
-  calendars: Map<string, Calendar>
+  calendars: Map<string, Calendar>,
 ) {
   const channel = message.mentions.channels.first();
   if (!channel) {
@@ -81,7 +81,7 @@ export async function handleNewEvent(
 export async function handleDeleteEvent(
   message: Message,
   args: string[],
-  calendars: Map<string, Calendar>
+  calendars: Map<string, Calendar>,
 ) {
   const channel = message.mentions.channels.first();
   if (!channel) {
@@ -114,7 +114,7 @@ export async function handleDeleteEvent(
 export async function handleEditEvent(
   message: Message,
   args: string[],
-  calendars: Map<string, Calendar>
+  calendars: Map<string, Calendar>,
 ) {
   const channel = message.mentions.channels.first();
   if (!channel) {

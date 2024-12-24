@@ -4,7 +4,7 @@ const RE_TWITTER = new RegExp(
     "/(\\w+)/status/(\\d+)(/(?:photo|video)/\\d)?/?(?:\\?\\S+)?(?:#\\S+)?",
   // 'i' flag for case-insensitivity
   // 'g' flag for global search - makes String.match() exclude capture groups
-  "ig"
+  "ig",
 );
 
 export function extractTwitterURLs(text: string): string[] {

@@ -25,7 +25,7 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
       refMsgID: refMsg.id,
       refMsgAttachments: refMsg.attachments.size,
     },
-    "Extracting links from message"
+    "Extracting links from message",
   );
 
   if (refMsg.attachments.size === 0) {
@@ -46,7 +46,7 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
   // Group attachments into list of strings max 2000 characters
   const msgs = itemsToMessageContents(
     "",
-    refMsg.attachments.map((a) => a.url)
+    refMsg.attachments.map((a) => a.url),
   );
 
   log.debug(
@@ -56,13 +56,13 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
       attachments: refMsg.attachments.size,
       numMsgs: msgs.length,
     },
-    "Found attachment links, sending"
+    "Found attachment links, sending",
   );
 
   try {
     if (msgs.length > 1) {
       await msg.reply(
-        "Links in __multiple messages__ below, make sure to copy all of them"
+        "Links in __multiple messages__ below, make sure to copy all of them",
       );
     }
 

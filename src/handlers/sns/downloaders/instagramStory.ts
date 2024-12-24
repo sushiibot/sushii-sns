@@ -41,11 +41,11 @@ const log = logger.child({ module: "InstagramStoryDownloader" });
 
 export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi
+    /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi,
   );
 
   protected createLinkFromMatch(
-    match: RegExpMatchArray
+    match: RegExpMatchArray,
   ): SnsLink<InstagramMetadata> {
     return {
       url: match[0],
@@ -64,13 +64,13 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
           "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com",
           "x-rapidapi-key": config.RAPID_API_KEY,
         },
-      }
+      },
     );
   }
 
   async fetchContent(
     snsLink: SnsLink<InstagramMetadata>,
-    progressCallback?: ProgressFn
+    progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetch(req);
@@ -82,7 +82,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
           responseCode: response.status,
           responseBody: await response.text(),
         },
-        "Failed to fetch ig API story response"
+        "Failed to fetch ig API story response",
       );
 
       throw new Error("Failed to fetch ig API story response");
@@ -103,7 +103,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
           responseCode: response.status,
           body: rawJson,
         },
-        "Failed to parse ig trigger API response"
+        "Failed to parse ig trigger API response",
       );
 
       throw new Error("Failed to parse ig JSON response");
@@ -113,7 +113,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
       {
         igStoriesRes,
       },
-      "Fetched IG stories response"
+      "Fetched IG stories response",
     );
 
     if (!igStoriesRes.data || !igStoriesRes.data.items) {
@@ -125,7 +125,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     }
 
     progressCallback?.(
-      `Downloading ${igStoriesRes.data.items.length} stories...`
+      `Downloading ${igStoriesRes.data.items.length} stories...`,
     );
 
     // Categorize by date in KST!! Could be multiple stories on different days
@@ -142,7 +142,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
           {
             item,
           },
-          "No taken_at_date ... bruh"
+          "No taken_at_date ... bruh",
         );
       }
 
@@ -171,7 +171,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
           {
             item,
           },
-          "No video or thumbnail URL... bruh"
+          "No video or thumbnail URL... bruh",
         );
       }
     }
@@ -180,7 +180,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
       {
         stories: storiesByDate,
       },
-      "Downloading media URLs"
+      "Downloading media URLs",
     );
 
     const postDatas = [];
@@ -214,7 +214,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
   // Needs to be separate so we can get the Discord attachment URLs
   buildDiscordAttachments(
-    postData: PostData<InstagramMetadata>
+    postData: PostData<InstagramMetadata>,
   ): MessageCreateOptions[] {
     const ts = postData.timestamp
       ? dayjs(postData.timestamp).tz(KST_TIMEZONE).format("YYMMDD")
@@ -236,7 +236,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     // Groups of 10
     const attachmentsChunks = chunkArray(
       attachments,
-      MAX_ATTACHMENTS_PER_MESSAGE
+      MAX_ATTACHMENTS_PER_MESSAGE,
     );
 
     return attachmentsChunks.map((chunk) => {
@@ -249,7 +249,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
   buildDiscordMessages(
     postData: PostData<InstagramMetadata>,
-    attachmentURLs: string[]
+    attachmentURLs: string[],
   ): MessageCreateOptions[] {
     let msgs: MessageCreateOptions[] = [];
 
@@ -257,7 +257,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     mainPostContent += formatDiscordTitle(
       "instagram",
       postData.username,
-      postData.timestamp
+      postData.timestamp,
     );
     mainPostContent += "\n";
     mainPostContent += `<${postData.postLink.url}>`;
@@ -266,7 +266,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     // Image URLs can be span multiple messages
     const msgChunkContents = itemsToMessageContents(
       mainPostContent,
-      attachmentURLs
+      attachmentURLs,
     );
 
     const msgChunks: MessageCreateOptions[] = msgChunkContents.map((chunk) => ({
