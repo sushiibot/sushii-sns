@@ -141,12 +141,16 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
       buffer: buffers[0],
     };
 
+    const ts =
+      ttPost.data.aweme_detail.create_time &&
+      ttPost.data.aweme_detail.create_time * 1000;
+
     const postData: PostData<TikTokMetadata> = {
       postLink: snsLink,
       username: ttPost.data.aweme_detail.author?.unique_id || "Unknown user",
       postID: snsLink.metadata.videoId,
       originalText: "",
-      timestamp: dayjs(ttPost.data.aweme_detail.create_time).toDate(),
+      timestamp: ts ? dayjs(ts).toDate() : undefined,
       files: [file],
     };
 
