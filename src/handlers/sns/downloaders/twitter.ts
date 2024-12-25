@@ -8,6 +8,7 @@ import { chunkArray, itemsToMessageContents } from "../../util";
 import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
 import {
   SnsDownloader,
+  type Platform,
   type PostData,
   type SnsLink,
   type TwitterMetadata,
@@ -22,6 +23,8 @@ import {
 const log = logger.child({ module: "TwitterDownloader" });
 
 export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
+  PLATFORM: Platform = "twitter";
+
   URL_REGEX = new RegExp(
     "https?://(?:(?:www|m|mobile)\\.)?" +
       "(?:twitter\\.com|x\\.com)" +

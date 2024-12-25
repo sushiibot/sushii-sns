@@ -20,6 +20,7 @@ import {
 import {
   SnsDownloader,
   type InstagramMetadata,
+  type Platform,
   type PostData,
   type ProgressFn,
   type SnsLink,
@@ -33,6 +34,8 @@ import {
 const log = logger.child({ module: "InstagramPostDownloader" });
 
 export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
+  PLATFORM: Platform = "instagram";
+
   URL_REGEX = new RegExp(
     /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\//gi,
   );

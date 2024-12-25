@@ -3,7 +3,7 @@ import logger from "../../../logger";
 
 const log = logger.child({ module: "snsHandler" });
 
-export type Platform = "twitter" | "instagram" | "instagram-story";
+export type Platform = "twitter" | "instagram" | "instagram-story" | "tiktok";
 
 // Generic interfaces to make the downloader more flexible
 export interface SnsMetadata {
@@ -21,7 +21,15 @@ export interface InstagramMetadata extends SnsMetadata {
   platform: "instagram" | "instagram-story";
 }
 
-export type AnySnsMetadata = TwitterMetadata | InstagramMetadata;
+export interface TikTokMetadata extends SnsMetadata {
+  platform: "tiktok";
+  videoId: string;
+}
+
+export type AnySnsMetadata =
+  | TwitterMetadata
+  | InstagramMetadata
+  | TikTokMetadata;
 
 // Define type guard functions for each metadata type
 export function isTwitterMetadata(
@@ -66,6 +74,8 @@ export interface PostData<M extends SnsMetadata> {
 export type ProgressFn = (message: string, done?: boolean) => Promise<void>;
 
 export abstract class SnsDownloader<M extends SnsMetadata> {
+  abstract readonly PLATFORM: Platform;
+
   /**
    * Regular expression to match platform-specific URLs
    * Implemented by child classes

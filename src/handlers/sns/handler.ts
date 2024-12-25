@@ -3,47 +3,46 @@ import logger from "../../logger";
 import {
   SnsDownloader,
   type AnySnsMetadata,
-  type InstagramMetadata,
   type PostData,
   type ProgressFn,
   type SnsLink,
   type SnsMetadata,
-  type TwitterMetadata,
 } from "./downloaders/base";
 import { InstagramPostDownloader } from "./downloaders/instagramPost";
 import { InstagramStoryDownloader } from "./downloaders/instagramStory";
+import { TikTokDownloader } from "./downloaders/tiktok";
 import { TwitterDownloader } from "./downloaders/twitter";
 
 const log = logger.child({ module: "snsHandler" });
 
-const twitterDownloader: SnsDownloader<TwitterMetadata> =
-  new TwitterDownloader();
-const instagramDownloader: SnsDownloader<InstagramMetadata> =
-  new InstagramPostDownloader();
-const instagramStoryDownloader: SnsDownloader<InstagramMetadata> =
-  new InstagramStoryDownloader();
+const downloaders = [
+  new TwitterDownloader(),
+  new InstagramPostDownloader(),
+  new InstagramStoryDownloader(),
+  new TikTokDownloader(),
+];
 
 function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
-  const twitterLinks = twitterDownloader.findUrls(content);
-  const instagramLinks = instagramDownloader.findUrls(content);
-  const instagramStoryLinks = instagramStoryDownloader.findUrls(content);
+  let snsLinks: SnsLink<AnySnsMetadata>[] = [];
+  for (const downloader of downloaders) {
+    const urls = downloader.findUrls(content);
+    snsLinks = snsLinks.concat(urls);
+  }
 
-  return [...twitterLinks, ...instagramLinks, ...instagramStoryLinks];
+  return snsLinks;
 }
 
 function getPlatform<M extends SnsMetadata>(
   metadata: M,
 ): SnsDownloader<AnySnsMetadata> {
-  switch (metadata.platform) {
-    case "twitter":
-      return twitterDownloader;
-    case "instagram":
-      return instagramDownloader;
-    case "instagram-story":
-      return instagramStoryDownloader;
-    default:
-      throw new Error(`Unsupported platform: ${metadata.platform}`);
+  const downloader = downloaders.find(
+    (downloader) => downloader.PLATFORM === metadata.platform,
+  );
+  if (!downloader) {
+    throw new Error(`Unsupported platform: ${metadata.platform}`);
   }
+
+  return downloader;
 }
 
 async function* snsService(

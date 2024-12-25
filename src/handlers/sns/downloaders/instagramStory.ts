@@ -11,6 +11,7 @@ import { IgStoriesSchema, type IgStories } from "../igStories";
 import {
   SnsDownloader,
   type InstagramMetadata,
+  type Platform,
   type PostData,
   type ProgressFn,
   type SnsLink,
@@ -25,6 +26,8 @@ import {
 const log = logger.child({ module: "InstagramStoryDownloader" });
 
 export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
+  protected PLATFORM: Platform = "instagram-story";
+
   URL_REGEX = new RegExp(
     /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi,
   );
