@@ -9,6 +9,7 @@ import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
 import { IgStoriesSchema, type IgStories } from "../igStories";
 import {
+  attachmentMessageContent,
   SnsDownloader,
   type InstagramMetadata,
   type Platform,
@@ -26,7 +27,7 @@ import {
 const log = logger.child({ module: "InstagramStoryDownloader" });
 
 export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
-  protected PLATFORM: Platform = "instagram-story";
+  PLATFORM: Platform = "instagram-story";
 
   URL_REGEX = new RegExp(
     /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi,
@@ -229,7 +230,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
     return attachmentsChunks.map((chunk) => {
       return {
-        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        content: attachmentMessageContent(),
         files: chunk,
       };
     });

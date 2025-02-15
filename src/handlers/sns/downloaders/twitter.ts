@@ -7,6 +7,7 @@ import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
 import type { APIMedia, TweetAPIResponse } from "./../fxtweet";
 import {
+  attachmentMessageContent,
   SnsDownloader,
   type Platform,
   type PostData,
@@ -132,7 +133,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
 
     return attachmentsChunks.map((chunk) => {
       return {
-        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        content: attachmentMessageContent(),
         files: chunk,
       };
     });

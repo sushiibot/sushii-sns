@@ -84,11 +84,23 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     return;
   }
 
+  const reaction_emojis = [
+    "🤓",
+    "🤔",
+    "<a:aJennieMock:807147252673675275>",
+    "<a:aJennieLaugh:695359047775289364>",
+    "<a:aJennieConfused:851430424386207754>",
+    "<a:ajenniecarrot:816670999994171424>",
+  ];
+
+  const reaction =
+    reaction_emojis[Math.floor(Math.random() * reaction_emojis.length)];
+
   // Only if there are posts to process
   // Don't wait for acks
   Promise.all([
     msg.suppressEmbeds(true),
-    msg.react("🤓"),
+    msg.react(reaction),
     msg.channel.sendTyping(),
   ]).catch((err) => logger.error(err, "failed to suppress/react/type"));
 

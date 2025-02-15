@@ -18,6 +18,7 @@ import {
   type InstagramPostElement,
 } from "../instagram";
 import {
+  attachmentMessageContent,
   SnsDownloader,
   type InstagramMetadata,
   type Platform,
@@ -320,7 +321,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
     return attachmentsChunks.map((chunk) => {
       return {
-        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        content: attachmentMessageContent(),
         files: chunk,
       };
     });

@@ -8,6 +8,7 @@ import config from "../../../config/config";
 import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
 import {
+  attachmentMessageContent,
   SnsDownloader,
   type Platform,
   type PostData,
@@ -177,7 +178,7 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
 
     return attachmentsChunks.map((chunk) => {
       return {
-        content: "PLS DON'T DELETE ME !!! or it will break the image links",
+        content: attachmentMessageContent(),
         files: chunk,
       };
     });
