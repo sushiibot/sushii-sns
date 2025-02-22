@@ -73,9 +73,7 @@ export interface PostData<M extends SnsMetadata> {
 
 // --------------------------------------------------------------------------
 export function attachmentMessageContent(): string {
-  const options = ["hi", "meow", ""];
-
-  return options[Math.floor(Math.random() * options.length)];
+  return "";
 }
 
 export type ProgressFn = (message: string, done?: boolean) => Promise<void>;

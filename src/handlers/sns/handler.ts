@@ -85,12 +85,10 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
   }
 
   const reaction_emojis = [
-    "🤓",
-    "🤔",
+    "👍",
+    "<:jenniekek2:821808883810041876>",
     "<a:aJennieMock:807147252673675275>",
     "<a:aJennieLaugh:695359047775289364>",
-    "<a:aJennieConfused:851430424386207754>",
-    "<a:ajenniecarrot:816670999994171424>",
   ];
 
   const reaction =
