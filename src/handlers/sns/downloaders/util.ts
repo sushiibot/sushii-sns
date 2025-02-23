@@ -1,7 +1,7 @@
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import type { Platform } from "./base";
+import { platformToString, type Platform } from "./base";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -54,7 +54,7 @@ export function formatDiscordTitle(
     title += " ";
   }
 
-  const platformName = platform[0].toUpperCase() + platform.slice(1);
+  const platformName = platformToString(platform);
   title += `${username} ${platformName} Update`;
   title += "`";
 

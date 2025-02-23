@@ -5,6 +5,19 @@ const log = logger.child({ module: "snsHandler" });
 
 export type Platform = "twitter" | "instagram" | "instagram-story" | "tiktok";
 
+export function platformToString(platform: Platform): string {
+  switch (platform) {
+    case "twitter":
+      return "Twitter";
+    case "instagram":
+      return "Instagram";
+    case "instagram-story":
+      return "Instagram";
+    case "tiktok":
+      return "TikTok";
+  }
+}
+
 // Generic interfaces to make the downloader more flexible
 export interface SnsMetadata {
   // Base interface for platform-specific metadata
