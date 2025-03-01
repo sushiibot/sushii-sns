@@ -287,12 +287,10 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       };
     });
 
-    progressCallback?.("Downloaded!", true);
-
     // Check if any heic files
     const heicFiles = files.filter((f) => f.ext === "heic");
     if (heicFiles.length > 0) {
-      progressCallback?.("Converting heic files", true);
+      progressCallback?.("Converting heic files", false);
 
       log.debug("Starting HEIC to JPG conversion for", {
         count: heicFiles.length,
@@ -331,6 +329,8 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         }),
       );
     }
+
+    progressCallback?.("Downloaded!", true);
 
     return [
       {
