@@ -4,6 +4,7 @@ import {
   MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
+import sharp from "sharp";
 import config from "../../../config/config";
 import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
@@ -287,6 +288,49 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     });
 
     progressCallback?.("Downloaded!", true);
+
+    // Check if any heic files
+    const heicFiles = files.filter((f) => f.ext === "heic");
+    if (heicFiles.length > 0) {
+      progressCallback?.("Converting heic files", true);
+
+      log.debug("Starting HEIC to JPG conversion for", {
+        count: heicFiles.length,
+      });
+
+      // Convert heic to jpg
+      for (const [idx, file] of files.entries()) {
+        if (file.ext !== "heic") {
+          continue;
+        }
+
+        const jpgBuffer = await sharp(file.buffer).jpeg().toBuffer();
+        files[idx].buffer = jpgBuffer;
+        files[idx].ext = "jpg";
+      }
+
+      await Promise.all(
+        files.map(async (file, idx) => {
+          if (file.ext !== "heic") {
+            return;
+          }
+
+          try {
+            const jpgBuffer = await sharp(file.buffer).jpeg().toBuffer();
+            files[idx].buffer = jpgBuffer;
+            files[idx].ext = "jpg";
+            log.debug("Converted HEIC to JPG", { index: idx });
+          } catch (err) {
+            log.error("Failed to convert HEIC to JPG", {
+              index: idx,
+              error: err,
+            });
+            // Re-throw, will be caught by the caller
+            throw err;
+          }
+        }),
+      );
+    }
 
     return [
       {
