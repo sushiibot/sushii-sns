@@ -11,12 +11,14 @@ import { IgStoriesSchema, type IgStories } from "../igStories";
 import {
   attachmentMessageContent,
   SnsDownloader,
+  type File,
   type InstagramMetadata,
   type Platform,
   type PostData,
   type ProgressFn,
   type SnsLink,
 } from "./base";
+import { convertHeicToJpeg } from "./heic";
 import {
   formatDiscordTitle,
   getFileExtFromURL,
@@ -176,12 +178,15 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     for (const { date, urls } of storiesByDate.values()) {
       const buffers = await this.downloadImages(urls);
 
-      const files = buffers.map((buf, i) => {
+      let files: File[] = buffers.map((buf, i) => {
         return {
           ext: getFileExtFromURL(urls[i]),
           buffer: buf,
         };
       });
+
+      // Convert any HEIC files to JPEG
+      files = await convertHeicToJpeg(files);
 
       const postData: PostData<InstagramMetadata> = {
         postLink: snsLink,

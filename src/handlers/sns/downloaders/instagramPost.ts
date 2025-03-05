@@ -4,7 +4,6 @@ import {
   MessageFlags,
   type MessageCreateOptions,
 } from "discord.js";
-import sharp from "sharp";
 import config from "../../../config/config";
 import logger from "../../../logger";
 import { chunkArray, itemsToMessageContents } from "../../util";
@@ -21,12 +20,14 @@ import {
 import {
   attachmentMessageContent,
   SnsDownloader,
+  type File,
   type InstagramMetadata,
   type Platform,
   type PostData,
   type ProgressFn,
   type SnsLink,
 } from "./base";
+import { convertHeicToJpeg } from "./heic";
 import {
   formatDiscordTitle,
   getFileExtFromURL,
@@ -280,55 +281,15 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
     const buffers = await this.downloadImages(mediaUrls);
 
-    const files = buffers.map((buf, i) => {
+    let files = buffers.map((buf, i): File => {
       return {
         ext: getFileExtFromURL(mediaUrls![i]),
         buffer: buf,
       };
     });
 
-    // Check if any heic files
-    const heicFiles = files.filter((f) => f.ext === "heic");
-    if (heicFiles.length > 0) {
-      progressCallback?.("Converting heic files", false);
-
-      log.debug("Starting HEIC to JPG conversion for", {
-        count: heicFiles.length,
-      });
-
-      // Convert heic to jpg
-      for (const [idx, file] of files.entries()) {
-        if (file.ext !== "heic") {
-          continue;
-        }
-
-        const jpgBuffer = await sharp(file.buffer).jpeg().toBuffer();
-        files[idx].buffer = jpgBuffer;
-        files[idx].ext = "jpg";
-      }
-
-      await Promise.all(
-        files.map(async (file, idx) => {
-          if (file.ext !== "heic") {
-            return;
-          }
-
-          try {
-            const jpgBuffer = await sharp(file.buffer).jpeg().toBuffer();
-            files[idx].buffer = jpgBuffer;
-            files[idx].ext = "jpg";
-            log.debug("Converted HEIC to JPG", { index: idx });
-          } catch (err) {
-            log.error("Failed to convert HEIC to JPG", {
-              index: idx,
-              error: err,
-            });
-            // Re-throw, will be caught by the caller
-            throw err;
-          }
-        }),
-      );
-    }
+    // Check if any heic files, convert to jpg
+    files = await convertHeicToJpeg(files);
 
     progressCallback?.("Downloaded!", true);
 
