@@ -154,9 +154,8 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     }
   } catch (err) {
     logger.error(err, "failed to process sns message");
-    let errMsg =
-      "oops borked the download try again or go download it urself lol sorry 💀";
-    errMsg += "\n\n<@150443906511667200> pls fix\n";
+    let errMsg = "oops borked the download, pls try again!!";
+    errMsg += `\n\n<@150443906511667200> Error: ${err}\n`;
 
     await msg.channel.send(errMsg);
   }
