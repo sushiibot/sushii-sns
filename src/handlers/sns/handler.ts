@@ -103,28 +103,36 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
   ]).catch((err) => logger.error(err, "failed to suppress/react/type"));
 
   let progressMsg: Message | null = null;
+  let progressPromise = Promise.resolve();
+
   const progressUpdater = async (content: string, done?: boolean) => {
-    try {
-      // Delete when done
-      if (done && progressMsg) {
-        await progressMsg.delete();
-        return;
-      }
+    // Create a new function that captures the current operation
+    const updateOperation = async () => {
+      try {
+        // Delete when done
+        if (done && progressMsg) {
+          await progressMsg.delete();
+          return;
+        }
 
-      // Edit if exists -- could be updated when the initial message wasn't sent yet
-      // doesn't wait until the initial message is sent before doing updates
-      if (progressMsg) {
-        await progressMsg.edit(content);
-        return;
-      }
+        // Edit if exists
+        if (progressMsg) {
+          await progressMsg.edit(content);
+          return;
+        }
 
-      // Send if not exists
-      progressMsg = await msg.channel.send({
-        content: content,
-      });
-    } catch (err) {
-      logger.error(err, "failed to send sns progress update message");
-    }
+        // Send if not exists
+        progressMsg = await msg.channel.send({
+          content: content,
+        });
+      } catch (err) {
+        logger.error(err, "failed to send sns progress update message");
+      }
+    };
+
+    // Wait for previous operations to complete, then run this one
+    progressPromise = progressPromise.then(updateOperation);
+    return progressPromise;
   };
 
   try {
