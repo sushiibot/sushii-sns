@@ -111,14 +111,17 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
         return;
       }
 
-      // Edit if exists
+      // Edit if exists -- could be updated when the initial message wasn't sent yet
+      // doesn't wait until the initial message is sent before doing updates
       if (progressMsg) {
         await progressMsg.edit(content);
         return;
       }
 
       // Send if not exists
-      progressMsg = await msg.channel.send(content);
+      progressMsg = await msg.channel.send({
+        content: content,
+      });
     } catch (err) {
       logger.error(err, "failed to send sns progress update message");
     }

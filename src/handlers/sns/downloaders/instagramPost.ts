@@ -140,51 +140,73 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   }
 
   async fetchSnapshotData(snapshotID: string): Promise<InstagramPostElement> {
-    const req = new Request(
-      `https://api.brightdata.com/datasets/v3/snapshot/${snapshotID}?format=json`,
-      {
-        headers: {
-          Authorization: `Bearer ${config.BD_API_TOKEN}`,
-        },
-      },
-    );
-
-    const response = await fetch(req);
-
-    if (response.status !== 200) {
-      log.error(
+    // 5 retries
+    for (let i = 0; i < 5; i++) {
+      const req = new Request(
+        `https://api.brightdata.com/datasets/v3/snapshot/${snapshotID}?format=json`,
         {
-          responseCode: response.status,
-          responseBody: await response.text(),
+          headers: {
+            Authorization: `Bearer ${config.BD_API_TOKEN}`,
+          },
         },
-        "Failed to fetch ig API snapshot response",
       );
 
-      throw new Error("Failed to fetch ig API response");
-    }
+      const response = await fetch(req);
 
-    try {
-      const rawJson = await response.json();
-      // List of posts
-      const posts = InstagramPostListSchema.parse(rawJson);
-      if (posts.length === 0) {
-        throw new Error("No Instagram posts found");
+      // Might be too fast, "Snapshot is building, try again in 30s"
+      if (response.status === 202) {
+        log.debug(
+          {
+            requestURL: req.url,
+            responseCode: response.status,
+            responseBody: await response.text(),
+          },
+          "IG API snapshot is still building",
+        );
+
+        // Retry in 3 seconds
+        await sleep(3 * 1000);
+        continue;
       }
 
-      // Only one post
-      return posts[0];
-    } catch (err) {
-      log.error(
-        {
-          err,
-          response,
-          responseCode: response.status,
-        },
-        "Failed to parse ig API snapshot response",
-      );
+      if (response.status !== 200) {
+        log.error(
+          {
+            responseCode: response.status,
+            responseBody: await response.text(),
+          },
+          "Failed to fetch ig API snapshot response",
+        );
 
-      throw err;
+        await sleep(3 * 1000);
+        continue;
+      }
+
+      try {
+        const rawJson = await response.json();
+        // List of posts
+        const posts = InstagramPostListSchema.parse(rawJson);
+        if (posts.length === 0) {
+          throw new Error("No Instagram posts found");
+        }
+
+        // Only one post
+        return posts[0];
+      } catch (err) {
+        log.error(
+          {
+            err,
+            response,
+            responseCode: response.status,
+          },
+          "Failed to parse ig API snapshot response",
+        );
+
+        throw err;
+      }
     }
+
+    throw new Error("Failed to fetch ig API response after 5 tries");
   }
 
   async fetchContent(
