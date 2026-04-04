@@ -11,7 +11,7 @@ import { createMonitorRepository } from "./handlers/monitor/repository";
 import { handleInteraction } from "./handlers/monitor/interactions";
 import { isDevMode } from "./handlers/monitor/runtime";
 import logger from "./logger";
-import { startHealthCheckServer } from "./server/botHttp";
+import { clientHealthy, startHealthCheckServer } from "./server/botHttp";
 
 const log = logger.child({ module: "bot" });
 
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     }
   });
 
-  const httpServer = await startHealthCheckServer(client);
+  const httpServer = await startHealthCheckServer(clientHealthy(client));
   log.info({ port: httpServer.port }, "Health check server started");
 
   process.on("SIGTERM", async () => {
