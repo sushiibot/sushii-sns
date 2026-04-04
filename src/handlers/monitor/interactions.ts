@@ -36,7 +36,6 @@ import {
   REVIEW_SKIP_PREFIX,
   MONITOR_POLL_PREFIX,
 } from "./review";
-import { sendOpsAlert } from "../../utils/opsAlert";
 
 const log = logger.child({ module: "monitor/interactions" });
 
@@ -145,12 +144,8 @@ export async function handleInteraction(
         } catch (err) {
           log.error(err, "/fetch-all failed");
           await cmd.editReply({
-            content:
-              "Something went wrong while syncing. A public message was posted in this channel with details.",
+            content: "Something went wrong while syncing.",
           });
-          if (cmd.channel?.isSendable()) {
-            await sendOpsAlert(cmd.channel, "/fetch-all command failed", err);
-          }
         }
         return;
       }

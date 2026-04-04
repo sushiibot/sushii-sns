@@ -41,9 +41,6 @@ bun test src/platforms/twitter/downloader.test.ts
 
 - `GET /` — simple text
 - `GET /v1/health` — `OK` / `500` from gateway-style health (`clientHealthy`)
-- `GET /v1/ready` — Discord client ready
-- `GET /v1/uptime` — process and bot uptime JSON
-- `GET /v1/status` — health, ping, guild count, memory (JSON)
 
 Request logging uses `hono/logger` middleware.
 
@@ -71,13 +68,11 @@ When `MONITORS_CONFIG_PATH` points to a JSON config:
 - **Connections** (not legacy “subscriptions”): each maps Instagram sources → review channel → destination channel; panel lives in `panel_channel_id`.
 - **SQLite**: `DB_PATH` metadata DB includes panel state, connection fetch meta, and `monitor_seen_posts`. See `src/handlers/monitor/db.ts`, `schema.ts`.
 - **Queue**: `handlers/monitor/queue.ts` serializes post jobs with timeout.
-- **Ops alerts**: `src/utils/opsAlert.ts` (optional `ALERT_DISCORD_USER_ID`).
 
 ### Other notable modules
 
 - `src/apiUsage.ts` — usage counters for external APIs
 - `src/utils/fallback.ts` — `tryWithFallbacks` for multi-provider fetches
-- `src/utils/opsAlert.ts` — public-channel failure alerts
 - `src/utils/discord.ts` — chunking, titles, `sendPostToChannel` (review/monitor posting)
 - `src/utils/http.ts` — `fetchWithHeaders`, `getFileExtFromURL`
 - `src/utils/socialUrls.ts` — small URL parsers (e.g. TikTok username from URL)
@@ -103,5 +98,4 @@ CHANNEL_ID_WHITELIST  # Comma-separated Discord channel IDs
 | `SERVER_CONFIG_PATH` | Guild routing / feature flags (`server_config.json`) |
 | `MONITORS_CONFIG_PATH` | Enables monitor + slash commands beyond `/usage` |
 | `DB_PATH` | Default `./data.db` (metadata; connection DBs live alongside) |
-| `ALERT_DISCORD_USER_ID` | Ops mention for alerts; empty string disables mention |
 | `MONITOR_DEV_MODE` | See `src/handlers/monitor/runtime.ts` |

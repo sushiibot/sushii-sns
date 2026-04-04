@@ -12,7 +12,6 @@ import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, PostData } from "../../platforms/base";
 import { getFileExtFromURL } from "../../utils/http";
-import { sendOpsAlert } from "../../utils/opsAlert";
 import { convertHeicToJpeg } from "../../utils/heic";
 import { buildInlineFormatContent } from "../../utils/template";
 import type { MonitorsConfig } from "./config";
@@ -123,17 +122,8 @@ export async function fetchConnectionAndCreateReviews(
     } catch (err) {
       log.error({ err, igUsername: connection.handle }, "Failed to fetch Instagram connection");
       await interaction.editReply(
-        "Failed to fetch Instagram posts/stories. Please try again. Details were posted in this channel.",
+        "Failed to fetch Instagram posts/stories. Please try again.",
       );
-      const pollChannel = interaction.channel;
-      if (pollChannel?.isSendable() && err instanceof AggregateError) {
-        await sendOpsAlert(
-          pollChannel,
-          `Monitor poll failed — Instagram @${connection.handle}`,
-          err,
-          `Connection: \`${connectionId}\``,
-        );
-      }
       return;
     }
   } else if (connection.type === "tiktok") {
@@ -146,17 +136,8 @@ export async function fetchConnectionAndCreateReviews(
     } catch (err) {
       log.error({ err, handle: connection.handle }, "Failed to fetch TikTok feed");
       await interaction.editReply(
-        "Failed to fetch TikTok feed. Please try again. Details were posted in this channel.",
+        "Failed to fetch TikTok feed. Please try again.",
       );
-      const pollChannel = interaction.channel;
-      if (pollChannel?.isSendable() && err instanceof AggregateError) {
-        await sendOpsAlert(
-          pollChannel,
-          `Monitor poll failed — TikTok @${connection.handle}`,
-          err,
-          `Connection: \`${connectionId}\``,
-        );
-      }
       return;
     }
   } else if (connection.type === "twitter") {
@@ -169,17 +150,8 @@ export async function fetchConnectionAndCreateReviews(
     } catch (err) {
       log.error({ err, handle: connection.handle }, "Failed to fetch Twitter feed");
       await interaction.editReply(
-        "Failed to fetch Twitter feed. Please try again. Details were posted in this channel.",
+        "Failed to fetch Twitter feed. Please try again.",
       );
-      const pollChannel = interaction.channel;
-      if (pollChannel?.isSendable() && err instanceof AggregateError) {
-        await sendOpsAlert(
-          pollChannel,
-          `Monitor poll failed — Twitter @${connection.handle}`,
-          err,
-          `Connection: \`${connectionId}\``,
-        );
-      }
       return;
     }
   }

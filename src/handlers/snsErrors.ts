@@ -34,9 +34,3 @@ export function formatSnsErrorForUser(err: unknown): string {
 
   return String(err);
 }
-
-/** True when every provider failed (AggregateError) and it is not only expired-story cases. */
-export function shouldAlertOpsForSnsFailure(err: unknown): boolean {
-  if (!(err instanceof AggregateError)) return false;
-  return !err.errors.every((e) => e instanceof StoryUnavailableError);
-}
