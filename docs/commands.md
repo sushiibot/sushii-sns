@@ -2,7 +2,7 @@
 
 Two families: **message commands** (`dl`, `links`) in whitelisted channels, and **slash commands** (registered globally at startup).
 
-Environment basics: `CHANNEL_ID_WHITELIST`, `DISCORD_TOKEN`, `APPLICATION_ID`. Monitor also needs `MONITORS_CONFIG_PATH` and API keys per [CLAUDE.md](../CLAUDE.md).
+Environment basics: `CHANNEL_ID_WHITELIST`, `DISCORD_TOKEN`, `APPLICATION_ID`. Monitor also needs `MONITORS_CONFIG_PATH` and API keys — see [architecture.md](./architecture.md#environment-variables).
 
 ## 1. `dl` — download media
 

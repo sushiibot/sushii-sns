@@ -13,12 +13,7 @@ Sushii-SNS is a private Discord bot for content managers. This page summarizes h
 | Route | Purpose |
 |--------|---------|
 | `GET /` | Simple text response |
-| `GET /v1/health` | Gateway-style health from WebSocket status |
-| `GET /v1/ready` | Discord client ready |
-| `GET /v1/uptime` | Process / bot uptime JSON |
-| `GET /v1/status` | Health, ping, guild count, memory |
-
-Request logging uses Hono’s logger middleware.
+| `GET /v1/health` | `OK` (200) or `NOT OK` (500) based on Discord WebSocket status |
 
 ## Directory structure (high level)
 
@@ -49,3 +44,27 @@ Request logging uses Hono’s logger middleware.
 - **Seen/post rows** live in **`monitor_seen_posts`** on the same DB as panel metadata.
 
 See [monitor-feature.md](./monitor-feature.md) for config shape.
+
+## Environment variables
+
+**Required:**
+
+| Variable | Purpose |
+|----------|---------|
+| `DISCORD_TOKEN` | Bot token |
+| `APPLICATION_ID` | Discord application ID |
+| `BD_API_TOKEN` | Bright Data (Instagram posts) |
+| `RAPID_API_KEY` | Instagram stories + TikTok |
+| `CHANNEL_ID_WHITELIST` | Comma-separated Discord channel IDs |
+
+**Optional:**
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `LOG_LEVEL` | `info` | |
+| `SENTRY_DSN` | — | Error tracking |
+| `SERVER_CONFIG_PATH` | — | Guild routing / feature flags |
+| `MONITORS_CONFIG_PATH` | — | Enables monitor + slash commands beyond `/usage` |
+| `DB_PATH` | `./data.db` | Metadata DB; connection DBs live alongside |
+| `MONITOR_DEV_MODE` | — | See `src/handlers/monitor/runtime.ts` |
+| `ALERT_DISCORD_USER_ID` | — | User pinged on ops alerts |

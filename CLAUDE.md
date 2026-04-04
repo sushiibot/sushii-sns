@@ -5,95 +5,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-bun install          # Install dependencies
-bun dev              # Run with pino-pretty log formatting (development)
-bun start            # Run without log formatting (production-like)
-bun run typecheck    # TypeScript type checking (no emit)
-bun test             # Run tests (*.test.ts files)
-INTEGRATION=1 bun test  # Also run integration tests (real API calls)
+bun install
+bun dev              # pino-pretty log formatting
+bun start
+bun run typecheck
+bun test
+INTEGRATION=1 bun test
+bun test src/platforms/twitter/downloader.test.ts  # single file
 ```
-
-To run a single test file:
-
-```bash
-bun test src/platforms/twitter/downloader.test.ts
-```
-
-## Deeper docs
-
-- [docs/architecture.md](docs/architecture.md) — code flows, directory map
-- [docs/monitor-feature.md](docs/monitor-feature.md) — Instagram monitor (connections, review queue)
-- [docs/platforms.md](docs/platforms.md), [docs/commands.md](docs/commands.md)
 
 ## Architecture
 
-**sushii-sns** downloads media from Twitter/X, Instagram posts/reels, Instagram stories, and TikTok when users post links prefixed with `dl` in whitelisted channels. It also extracts attachment URLs when someone replies with `links` to a message.
+Discord bot that downloads social media (Twitter/X, Instagram posts/reels/stories, TikTok) when users post `dl <url>` in whitelisted channels.
 
-### Entry point flow
+**Message flow**: `src/index.ts` → `MessageCreate` (whitelist filter) → parallel `snsHandler` + `extractLinksHandler`. `snsHandler` requires message starting with `dl`, then `findAllSnsLinks` + async generator `snsService` streams downloads per platform.
 
-`src/index.ts` — loads env (`config/config.ts`), optional `server_config.json`, registers Discord handlers, **always** registers slash commands, starts a Hono HTTP server on **port 8080** (`src/server/botHttp.ts`).
+**Downloader pattern**: `src/platforms/<name>/downloader.ts` extends `SnsDownloader<M>` (`src/platforms/base.ts`). Required: `URL_REGEX`, `createLinkFromMatch`, `fetchContent`, `buildDiscordAttachments`, `buildDiscordMessages`. Register new downloaders in `src/handlers/sns.ts`.
 
-`src/handlers/MessageCreate.ts` — filters to `CHANNEL_ID_WHITELIST`, runs `extractLinksHandler` and `snsHandler` in parallel via `Promise.allSettled`.
+**Monitor** (optional, requires `MONITORS_CONFIG_PATH`): Polls connections on a pinned panel → fetches unseen posts → creates review embeds → staff approve/edit/skip before posting to socials channel. Interaction dispatch splits across `interactionPanel.ts`, `interactionPost.ts`, `interactionReview.ts`. State in SQLite (`DB_PATH`). See `docs/monitor-feature.md`.
 
-`InteractionCreate` — `/usage` → `handlers/usageSlash.ts`; monitor UI → `handlers/monitor/interactions.ts` when `MONITORS_CONFIG_PATH` is set and metadata DB is open.
+**Config**: Zod-validated env in `src/config/config.ts`. Optional per-guild message templates via `SERVER_CONFIG_PATH` → `src/config/server_config.ts`.
 
-### HTTP routes (port 8080)
+## Docs
 
-- `GET /` — simple text
-- `GET /v1/health` — `OK` / `500` from gateway-style health (`clientHealthy`)
-
-### SNS downloader pattern
-
-Downloaders live in `src/platforms/<name>/downloader.ts` and extend `SnsDownloader<M>` (`src/platforms/base.ts`):
-
-- `PLATFORM`, `URL_REGEX`, `createLinkFromMatch`, `buildApiRequest`, `fetchContent`, `buildDiscordAttachments`, `buildDiscordMessages`
-
-`snsHandler` (`src/handlers/sns.ts`) finds links, streams via `snsService`, sends attachments then formatted replies. Shared link discovery is exported as `findAllSnsLinks` / `snsService` for the monitor pipeline.
-
-### Platform implementations
-
-| Directory | Platform | API |
-|-----------|----------|-----|
-| `src/platforms/twitter/` | Twitter/X | api.fxtwitter.com |
-| `src/platforms/instagram-post/` | Posts/reels | Bright Data datasets (async snapshot) |
-| `src/platforms/instagram-story/` | Stories | RapidAPI (URL shape `.../stories/{username}/{storyId}/`) |
-| `src/platforms/tiktok/` | TikTok | RapidAPI |
-
-### Monitor feature (optional)
-
-When `MONITORS_CONFIG_PATH` points to a JSON config:
-
-- **Connections** (not legacy “subscriptions”): each maps Instagram sources → review channel → destination channel; panel lives in `panel_channel_id`.
-- **SQLite**: `DB_PATH` metadata DB includes panel state, connection fetch meta, and `monitor_seen_posts`. See `src/handlers/monitor/db.ts`, `schema.ts`.
-- **Queue**: `handlers/monitor/queue.ts` serializes post jobs with timeout.
-
-### Other notable modules
-
-- `src/apiUsage.ts` — usage counters for external APIs
-- `src/utils/fallback.ts` — `tryWithFallbacks` for multi-provider fetches
-- `src/utils/discord.ts` — chunking, titles, `sendPostToChannel` (review/monitor posting)
-- `src/utils/http.ts` — `fetchWithHeaders`, `getFileExtFromURL`
-- `src/utils/socialUrls.ts` — small URL parsers (e.g. TikTok username from URL)
-- `src/handlers/snsErrors.ts` — user-facing SNS error strings / ops alert gating
-- `src/config/config.ts` — zod-validated env (exits on invalid env)
-
-### Required environment variables
-
-```
-DISCORD_TOKEN
-APPLICATION_ID
-BD_API_TOKEN          # Bright Data (Instagram posts)
-RAPID_API_KEY         # Instagram stories + TikTok
-CHANNEL_ID_WHITELIST  # Comma-separated Discord channel IDs
-```
-
-### Optional environment variables
-
-| Variable | Notes |
-|----------|--------|
-| `LOG_LEVEL` | Default `info` |
-| `SENTRY_DSN` | Error tracking |
-| `SERVER_CONFIG_PATH` | Guild routing / feature flags (`server_config.json`) |
-| `MONITORS_CONFIG_PATH` | Enables monitor + slash commands beyond `/usage` |
-| `DB_PATH` | Default `./data.db` (metadata; connection DBs live alongside) |
-| `MONITOR_DEV_MODE` | See `src/handlers/monitor/runtime.ts` |
+- [docs/architecture.md](docs/architecture.md) — file map, HTTP routes, env vars
+- [docs/commands.md](docs/commands.md) — `dl`, `links`, slash commands
+- [docs/platforms.md](docs/platforms.md) — per-platform APIs, adding a platform
+- [docs/monitor-feature.md](docs/monitor-feature.md) — monitor config, DB, review flow
