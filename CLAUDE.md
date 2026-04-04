@@ -42,8 +42,6 @@ bun test src/platforms/twitter/downloader.test.ts
 - `GET /` — simple text
 - `GET /v1/health` — `OK` / `500` from gateway-style health (`clientHealthy`)
 
-Request logging uses `hono/logger` middleware.
-
 ### SNS downloader pattern
 
 Downloaders live in `src/platforms/<name>/downloader.ts` and extend `SnsDownloader<M>` (`src/platforms/base.ts`):
