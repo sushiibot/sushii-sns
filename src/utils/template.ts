@@ -61,6 +61,7 @@ export function buildLinksFormatMessages(
   template: string,
   postData: PostData<SnsMetadata>,
   cdnUrls: string[],
+  fullTextOverride?: string,
 ): MessageCreateOptions[] {
   const vars = buildTemplateVars(postData, cdnUrls);
 
@@ -70,22 +71,40 @@ export function buildLinksFormatMessages(
 
   if (linksIdx === -1) {
     // No {links} in template — render as-is, no CDN URL chunking
-    const content = renderTemplate(template, vars).slice(0, 2000);
+    const content = (
+      fullTextOverride !== undefined
+        ? fullTextOverride
+        : renderTemplate(template, vars)
+    ).slice(0, 2000);
     return [{ content, flags: MessageFlags.SuppressEmbeds }];
   }
 
-  const prefix = renderTemplate(template.slice(0, linksIdx), vars);
   const suffix = template.slice(linksIdx + linksPlaceholder.length);
   const renderedSuffix = suffix
     ? renderTemplate(suffix, vars)
     : "";
+
+  let prefix: string;
+  let appendSuffix = true;
+
+  if (fullTextOverride !== undefined) {
+    if (renderedSuffix && fullTextOverride.endsWith(renderedSuffix)) {
+      prefix = fullTextOverride.slice(0, -renderedSuffix.length);
+    } else {
+      prefix = fullTextOverride;
+      appendSuffix = false;
+    }
+  } else {
+    prefix = renderTemplate(template.slice(0, linksIdx), vars);
+  }
 
   // Use itemsToMessageContents to handle CDN URL overflow
   const chunks = itemsToMessageContents(prefix, cdnUrls);
 
   return chunks.map((chunk, i) => {
     // Append suffix to last chunk
-    const content = i === chunks.length - 1 ? chunk + renderedSuffix : chunk;
+    const tail = i === chunks.length - 1 && appendSuffix ? renderedSuffix : "";
+    const content = chunk + tail;
     return {
       content: content.slice(0, 2000),
       flags: MessageFlags.SuppressEmbeds,
@@ -103,4 +122,32 @@ export function buildInlineFormatContent(
 ): string {
   const vars = buildTemplateVars(postData);
   return renderTemplate(template, vars).slice(0, 2000);
+}
+
+/*
+ * Suppresses links in text except the last one
+ * Used for twitter text-only posts
+ * @param text - The text to suppress links in
+ * @returns The text with links suppressed except the last one
+ */
+export function suppressLinksInTextExceptLast(text: string): string {
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
+  const urls: string[] = [];
+  let match;
+  
+  // Find all URLs
+  while ((match = urlRegex.exec(text)) !== null) {
+    urls.push(match[0]);
+  }
+  
+  if (urls.length === 0) return text;
+  
+  const lastUrl = urls[urls.length - 1];
+  
+  return text.replace(urlRegex, (url) => {
+    if (url.startsWith('<') && url.endsWith('>')) return url;
+    // Don't wrap the last URL
+    if (url === lastUrl) return url;
+    return `<${url}>`;
+  });
 }

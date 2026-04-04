@@ -2,6 +2,7 @@ import type { Message } from "discord.js";
 import { MessageFlags } from "discord.js";
 import logger from "../logger";
 import { itemsToMessageContents } from "../utils/discord";
+import { formatLinksFailureReply } from "../utils/opsAlert";
 
 const log = logger.child({ module: "extractLinksHandler" });
 
@@ -75,6 +76,6 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
   } catch (err) {
     log.error(err, "Failed to send links");
 
-    await msg.reply("oops couldnt get links, <@150443906511667200> fix me pls");
+    await msg.reply(formatLinksFailureReply());
   }
 }

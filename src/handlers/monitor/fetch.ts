@@ -1,242 +1,196 @@
-import type { Database } from "bun:sqlite";
+/**
+ * Monitor polling: orchestrates provider fetch modules (list + hydrate), DB seen state,
+ * review creation, and `/fetch-all` sync.
+ */
 import {
-  AttachmentBuilder,
-  DiscordAPIError,
-  GuildMember,
+  MessageFlags,
   type ButtonInteraction,
   type Client,
   type SendableChannels,
 } from "discord.js";
-import config from "../../config/config";
 import type { ServerConfig } from "../../config/server_config";
-import { getGuildTemplate } from "../../config/server_config";
 import logger from "../../logger";
-import {
-  InstagramPostDownloader,
-  extractMediaUrls,
-} from "../../platforms/instagram-post/downloader";
-import {
-  BdScrapeResponseSchema,
-  InstagramPostListSchema,
-  type InstagramPostElement,
-} from "../../platforms/instagram-post/types";
-import type { InstagramMetadata, PostData } from "../../platforms/base";
+import type { AnySnsMetadata, PostData } from "../../platforms/base";
 import { getFileExtFromURL } from "../../utils/http";
+import { sendOpsAlert } from "../../utils/opsAlert";
 import { convertHeicToJpeg } from "../../utils/heic";
-import {
-  buildInlineFormatContent,
-  DEFAULT_LINKS_TEMPLATE,
-  DEFAULT_INLINE_TEMPLATE,
-} from "../../utils/template";
-import type { MonitorsConfig, Subscription } from "./config";
-import {
-  findSubscriptionByChannel,
-  FETCH_COOLDOWN_SECONDS,
-} from "./config";
-import {
-  getLastFetch,
-  isPostSeen,
-  upsertLastFetch,
-  getMonitorMessage,
-} from "./db";
-import { buildStatusEmbed, buildReviewMessage } from "./embed";
-import { createReview, deleteReview, type ChannelConfig } from "./review";
+import { buildInlineFormatContent } from "../../utils/template";
+import type { MonitorsConfig } from "./config";
+import { findConnectionById, getConnectionId } from "./config";
+import type { MonitorRepository } from "./repository";
+import { batchToMessageOptions, buildReviewBatches } from "./embed";
+import { fetchInstagramConnectionPosts } from "./fetch/instagram";
+import { fetchTiktokFeed } from "./fetch/tiktok";
+import { fetchTwitterFeedRapidApi } from "./fetch/twitter";
+import { createReview, deleteReview, type ReviewState } from "./review";
+
+/** Media download helper injected from the monitor orchestrator (HEIC conversion, etc.). */
+export type DownloadFilesFromUrls = (urls: string[]) => Promise<
+  { ext: string; buffer: Buffer }[]
+>;
+
+/**
+ * Filter to unseen, mark all unseen ids, then take the first `limit` for processing.
+ */
+export function selectUnseenMarkAllSlice<T>(
+  items: T[],
+  getId: (t: T) => string,
+  isPostSeen: ((id: string) => boolean) | undefined,
+  markPostSeen: ((id: string) => void) | undefined,
+  limit: number,
+): T[] {
+  const unseen = items.filter((item) => {
+    const id = getId(item);
+    return !id || !isPostSeen?.(id);
+  });
+  for (const item of unseen) {
+    const id = getId(item);
+    if (id) markPostSeen?.(id);
+  }
+  return unseen.slice(0, limit);
+}
 
 const log = logger.child({ module: "monitor/fetch" });
 
-const BD_SCRAPE_URL =
-  "https://api.brightdata.com/datasets/v3/scrape?dataset_id=gd_lk5ns7kz21pck8jpis&notify=false&include_errors=true";
+async function downloadFilesFromUrls(urls: string[]) {
+  const buffers = await Promise.all(
+    urls.map(async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to download media (${res.status}): ${url}`);
+      }
+      return Buffer.from(await res.arrayBuffer());
+    }),
+  );
 
-const downloader = new InstagramPostDownloader();
-
-// Guard against concurrent fetches for the same username (double-click race condition)
-const fetchingInProgress = new Set<string>();
-
-/**
- * Fetch all posts for an Instagram profile via the Brightdata scrape API.
- * Handles both synchronous (200) and asynchronous (202) responses.
- */
-export async function fetchIgProfilePosts(
-  igUsername: string,
-): Promise<InstagramPostElement[]> {
-  const profileUrl = `https://www.instagram.com/${igUsername}/`;
-
-  const req = new Request(BD_SCRAPE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.BD_API_TOKEN}`,
-    },
-    body: JSON.stringify({ input: [{ url: profileUrl }] }),
-  });
-
-  const res = await fetch(req);
-
-  if (res.status === 200) {
-    const rawJson = await res.json();
-    const arr = Array.isArray(rawJson) ? rawJson : [rawJson];
-    return InstagramPostListSchema.parse(arr);
-  }
-
-  if (res.status === 202) {
-    const body = BdScrapeResponseSchema.parse(await res.json());
-    if (!body.snapshot_id) throw new Error("No snapshot_id in 202 response");
-    log.debug({ igUsername, snapshotId: body.snapshot_id }, "IG profile scrape async, polling...");
-    // Profile scrapes can return many posts, allow longer timeout
-    return downloader.waitAndFetch(body.snapshot_id, 120_000);
-  }
-
-  throw new Error(`Failed to fetch IG profile posts: ${res.status}`);
-}
-
-/**
- * Build PostData for an InstagramPostElement.
- * Downloads and converts media.
- */
-async function buildPostData(
-  igPost: InstagramPostElement,
-  igUsername: string,
-): Promise<PostData<InstagramMetadata> | null> {
-  const { urls: mediaUrls } = extractMediaUrls(igPost);
-  if (mediaUrls.length === 0) {
-    log.warn({ igPost }, "IG post has no media URLs, skipping");
-    return null;
-  }
-
-  // Download media
-  const ps = mediaUrls.map(async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Failed to download media (${res.status}): ${url}`);
-    }
-    return Buffer.from(await res.arrayBuffer());
-  });
-
-  const buffers = await Promise.all(ps);
-
-  const files = await convertHeicToJpeg(
+  return convertHeicToJpeg(
     buffers.map((buf, i) => ({
-      ext: getFileExtFromURL(mediaUrls[i]),
+      ext: getFileExtFromURL(urls[i]),
       buffer: buf,
     })),
   );
-
-  const postUrl = igPost.url ?? `https://www.instagram.com/${igUsername}/`;
-
-  return {
-    postLink: {
-      url: postUrl,
-      metadata: { platform: "instagram" as const },
-    },
-    username: igPost.user_posted || igUsername,
-    postID: igPost.post_id || "",
-    originalText: igPost.description || "",
-    timestamp: igPost.timestamp,
-    files,
-  };
 }
 
-/**
- * Update all embed messages for a subscription across all watcher channels.
- */
-export async function updateAllEmbeds(
-  igUsername: string,
-  subscription: Subscription,
-  client: Client,
-  db: Database,
-): Promise<void> {
-  const lastFetch = getLastFetch(db, igUsername);
-
-  for (const watcher of subscription.watchers) {
-    const stored = getMonitorMessage(db, igUsername, watcher.channel_id);
-    if (!stored) continue;
-
-    try {
-      const channel = await client.channels.fetch(watcher.channel_id);
-      if (!channel || !channel.isTextBased()) continue;
-
-      const msg = await channel.messages.fetch(stored.message_id);
-      const embedData = buildStatusEmbed(igUsername, lastFetch);
-      await msg.edit({ ...embedData, embeds: [] } as any);
-    } catch (err) {
-      if (err instanceof DiscordAPIError && err.code === 10008) {
-        log.warn(
-          { igUsername, channelId: watcher.channel_id },
-          "Monitor embed message was deleted, skipping update",
-        );
-      } else {
-        log.error(err, "Failed to update monitor embed");
-      }
-    }
-  }
+function getDisplayName(interaction: ButtonInteraction): string {
+  const member = interaction.member as any;
+  const memberDisplayName = member && typeof member.displayName === "string" ? member.displayName : null;
+  return (
+    memberDisplayName ??
+    interaction.user.displayName ??
+    interaction.user.username
+  );
 }
 
-/**
- * Main fetch-and-post handler triggered by the "Fetch New Posts" button.
- */
-export async function fetchAndPost(
+export async function fetchConnectionAndCreateReviews(
   interaction: ButtonInteraction,
   client: Client,
   monitorsConfig: MonitorsConfig,
   serverConfig: ServerConfig | null,
-  db: Database,
+  monitorRepo: MonitorRepository,
+  connectionId: string,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const result = findSubscriptionByChannel(
-    monitorsConfig,
-    interaction.channelId,
-  );
-
-  if (!result) {
-    await interaction.editReply(
-      "This channel is not configured as a monitor watcher.",
-    );
+  const connection = findConnectionById(monitorsConfig, connectionId);
+  if (!connection) {
+    await interaction.editReply({ content: "Unknown connection." });
     return;
   }
 
-  const [subscription, watcher] = result;
-  const { ig_username: igUsername } = subscription;
+  await interaction.editReply("Fetching latest posts...");
 
-  // Role check
-  if (watcher.allowed_role_id) {
-    const member = interaction.member;
-    if (!member) {
-      await interaction.editReply("Could not verify your roles.");
+  const MAX_REVIEWS_PER_POLL = 3;
+  const MAX_STORIES_PER_POLL = 10;
+
+  let posts: PostData<AnySnsMetadata>[] = [];
+  if (connection.type === "instagram") {
+    try {
+      if (!connection.igId) {
+        await interaction.editReply("Instagram ID not configured for this connection.");
+        return;
+      }
+
+      posts = await fetchInstagramConnectionPosts(
+        connection.handle,
+        connection.igId,
+        downloadFilesFromUrls,
+        {
+          isPostSeen: (id) => monitorRepo.isPostSeen(connectionId, id),
+          markPostSeen: (id) => monitorRepo.markPostSeen(connectionId, id),
+          limit: MAX_REVIEWS_PER_POLL,
+        },
+      );
+    } catch (err) {
+      log.error({ err, igUsername: connection.handle }, "Failed to fetch Instagram connection");
+      await interaction.editReply(
+        "Failed to fetch Instagram posts/stories. Please try again. Details were posted in this channel.",
+      );
+      const pollChannel = interaction.channel;
+      if (pollChannel?.isSendable() && err instanceof AggregateError) {
+        await sendOpsAlert(
+          pollChannel,
+          `Monitor poll failed — Instagram @${connection.handle}`,
+          err,
+          `Connection: \`${connectionId}\``,
+        );
+      }
       return;
     }
-
-    const roles =
-      "cache" in member.roles
-        ? member.roles.cache
-        : null;
-
-    if (!roles || !roles.has(watcher.allowed_role_id)) {
+  } else if (connection.type === "tiktok") {
+    try {
+      posts = await fetchTiktokFeed(connection.handle, downloadFilesFromUrls, {
+        isPostSeen: (id) => monitorRepo.isPostSeen(connectionId, id),
+        markPostSeen: (id) => monitorRepo.markPostSeen(connectionId, id),
+        limit: MAX_REVIEWS_PER_POLL,
+      });
+    } catch (err) {
+      log.error({ err, handle: connection.handle }, "Failed to fetch TikTok feed");
       await interaction.editReply(
-        "You don't have the required role to fetch posts.",
+        "Failed to fetch TikTok feed. Please try again. Details were posted in this channel.",
       );
+      const pollChannel = interaction.channel;
+      if (pollChannel?.isSendable() && err instanceof AggregateError) {
+        await sendOpsAlert(
+          pollChannel,
+          `Monitor poll failed — TikTok @${connection.handle}`,
+          err,
+          `Connection: \`${connectionId}\``,
+        );
+      }
+      return;
+    }
+  } else if (connection.type === "twitter") {
+    try {
+      posts = await fetchTwitterFeedRapidApi(connection.handle, downloadFilesFromUrls, {
+        isPostSeen: (id) => monitorRepo.isPostSeen(connectionId, id),
+        markPostSeen: (id) => monitorRepo.markPostSeen(connectionId, id),
+        limit: MAX_REVIEWS_PER_POLL,
+      });
+    } catch (err) {
+      log.error({ err, handle: connection.handle }, "Failed to fetch Twitter feed");
+      await interaction.editReply(
+        "Failed to fetch Twitter feed. Please try again. Details were posted in this channel.",
+      );
+      const pollChannel = interaction.channel;
+      if (pollChannel?.isSendable() && err instanceof AggregateError) {
+        await sendOpsAlert(
+          pollChannel,
+          `Monitor poll failed — Twitter @${connection.handle}`,
+          err,
+          `Connection: \`${connectionId}\``,
+        );
+      }
       return;
     }
   }
 
-  // Cooldown check
-  const lastFetch = getLastFetch(db, igUsername);
-  if (lastFetch) {
-    const nextFetchAt =
-      lastFetch.last_fetched_at + FETCH_COOLDOWN_SECONDS * 1000;
-    if (Date.now() < nextFetchAt) {
-      const nextFetchSec = Math.floor(nextFetchAt / 1000);
-      await interaction.editReply(
-        `On cooldown. Next fetch available <t:${nextFetchSec}:R>.`,
-      );
-      return;
-    }
-  }
+  let newPosts: PostData<AnySnsMetadata>[];
 
-  if (fetchingInProgress.has(igUsername)) {
-    await interaction.editReply(
-      "A fetch is already in progress for this profile. Please wait.",
-    );
+  newPosts = posts;
+
+  if (newPosts.length === 0) {
+    monitorRepo.upsertConnectionMeta(connectionId, Date.now(), getDisplayName(interaction));
+    await interaction.editReply("No new posts found.");
     return;
   }
 
@@ -246,119 +200,130 @@ export async function fetchAndPost(
     return;
   }
 
-  await interaction.editReply("Fetching new posts...");
+  let postsToReview: PostData<AnySnsMetadata>[] = [];
+  let stories: PostData<AnySnsMetadata>[] = [];
+  let regularPosts: PostData<AnySnsMetadata>[] = [];
 
-  fetchingInProgress.add(igUsername);
-  try {
-    let igPosts: InstagramPostElement[];
+  if (connection.type === "instagram") {
+    const isInstagramStory = (p: PostData<AnySnsMetadata>): boolean =>
+      p.postLink?.metadata?.platform === "instagram-story";
+
+    stories = newPosts.filter(isInstagramStory);
+    regularPosts = newPosts.filter(p => !isInstagramStory(p));
+    postsToReview = [
+      ...stories.slice(0, MAX_STORIES_PER_POLL),
+      ...regularPosts.slice(0, MAX_REVIEWS_PER_POLL),
+    ];
+  } else {
+    postsToReview = newPosts.slice(0, MAX_REVIEWS_PER_POLL);
+  }
+
+  const socialsChannelId = monitorsConfig.socials_channel_id;
+  let reviewCount = 0;
+
+  for (const postData of postsToReview) {
+    if (!postData.postID) continue;
+
+    const allFileNames = postData.files.map((f, i) => `media-${i}.${f.ext}`);
+    const renderedContent = buildInlineFormatContent(monitorsConfig.template, postData as any);
+
+    const reviewState: ReviewState = {
+      postData,
+      connectionId,
+      removedIndices: new Set<number>(),
+      customContent: null,
+      renderedContent,
+      socialsChannelId,
+      format: monitorsConfig.format,
+      template: monitorsConfig.template,
+      fetcherUserId: interaction.user.id,
+      fileNames: allFileNames,
+      messageIds: [],
+    };
+
+    const reviewId = createReview(reviewState);
+
     try {
-      igPosts = await fetchIgProfilePosts(igUsername);
-    } catch (err) {
-      log.error(err, "Failed to fetch IG profile posts");
-      await interaction.editReply(
-        "Failed to fetch posts from Instagram. Please try again.",
-      );
-      return;
-    }
+      const batches = buildReviewBatches(reviewState, reviewId);
+      const messageIds: string[] = [];
 
-    log.debug({ igUsername, count: igPosts.length }, "Fetched IG profile posts");
-
-    // Filter to unseen posts with a valid post_id
-    const newPosts = igPosts.filter(
-      (p) => p.post_id && !isPostSeen(db, igUsername, p.post_id),
-    );
-
-    log.debug(
-      { igUsername, newCount: newPosts.length },
-      "New unseen IG posts",
-    );
-
-    if (newPosts.length === 0) {
-      // Still update last fetch time and embeds
-      const member = interaction.member;
-      const displayName =
-        (member instanceof GuildMember ? member.displayName : null) ??
-        interaction.user.displayName ??
-        interaction.user.username;
-
-      upsertLastFetch(db, igUsername, Date.now(), displayName);
-      await updateAllEmbeds(igUsername, subscription, client, db);
-
-      await interaction.editReply("No new posts found.");
-      return;
-    }
-
-    // Build per-watcher channel configs once (doesn't depend on individual post data)
-    const channelConfigs: ChannelConfig[] = subscription.watchers.map((w) => ({
-      channelId: w.channel_id,
-      format: w.format,
-      template:
-        w.template ??
-        getGuildTemplate(serverConfig, w.guild_id) ??
-        (w.format === "inline" ? DEFAULT_INLINE_TEMPLATE : DEFAULT_LINKS_TEMPLATE),
-    }));
-
-    let reviewCount = 0;
-
-    for (const igPost of newPosts) {
-      const postData = await buildPostData(igPost, igUsername).catch((err) => {
-        log.error(err, "Failed to build post data for IG post");
-        return null;
-      });
-
-      if (!postData) continue;
-
-      // Name files deterministically
-      const fileNames = postData.files.map((f, i) => `media-${i}.${f.ext}`);
-
-      // Pre-render using first watcher's template for modal pre-fill
-      const renderedContent = buildInlineFormatContent(
-        channelConfigs[0]?.template ?? DEFAULT_INLINE_TEMPLATE,
-        postData,
-      );
-
-      const reviewState = {
-        postData,
-        igUsername,
-        removedIndices: new Set<number>(),
-        customContent: null,
-        renderedContent,
-        channelConfigs,
-        fetcherUserId: interaction.user.id,
-        fileNames,
-      };
-      const reviewId = createReview(reviewState);
-
-      // Build attachment builders with deterministic names
-      const attachments = postData.files.map((f, i) =>
-        new AttachmentBuilder(f.buffer).setName(fileNames[i]),
-      );
-
-      try {
-        const reviewMsg = await (reviewChannel as SendableChannels).send(
-          buildReviewMessage(reviewState, reviewId, attachments),
+      for (const batch of batches) {
+        const msg = await (reviewChannel as SendableChannels).send(
+          batchToMessageOptions(batch),
         );
-        log.debug({ reviewId, messageId: reviewMsg.id }, "Review message sent");
-        reviewCount++;
-      } catch (err) {
-        log.error({ err, reviewId }, "Failed to send review message");
-        deleteReview(reviewId);
+        messageIds.push(msg.id);
       }
+
+      reviewState.messageIds = messageIds;
+
+      reviewCount++;
+      if (postData.postID) monitorRepo.markPostSeen(connectionId, postData.postID);
+    } catch (err) {
+      log.error({ err, reviewId }, "Failed to send review message");
+      deleteReview(reviewId);
     }
+  }
 
-    const member = interaction.member;
-    const displayName =
-      (member instanceof GuildMember ? member.displayName : null) ??
-      interaction.user.displayName ??
-      interaction.user.username;
+  monitorRepo.upsertConnectionMeta(connectionId, Date.now(), getDisplayName(interaction));
 
-    upsertLastFetch(db, igUsername, Date.now(), displayName);
-    await updateAllEmbeds(igUsername, subscription, client, db);
-
+  if (connection.type === "instagram") {
     await interaction.editReply(
-      `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"}. Review above.`,
+      `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${stories.length} story${stories.length === 1 ? "" : "s"} + ${regularPosts.slice(0, MAX_REVIEWS_PER_POLL).length} post${regularPosts.slice(0, MAX_REVIEWS_PER_POLL).length === 1 ? "" : "s"}). Review messages created below.`,
     );
-  } finally {
-    fetchingInProgress.delete(igUsername);
+  } else {
+    await interaction.editReply(
+      `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"}. Review messages created below.`,
+    );
+  }
+}
+
+/**
+ * Polls every monitor connection: marks all current feed/story items as seen without
+ * creating review messages or downloading media (except API calls required to list items).
+ * Updates last-fetch metadata per connection.
+ */
+export async function syncAllMonitorConnections(
+  monitorsConfig: MonitorsConfig,
+  monitorRepo: MonitorRepository,
+  opts?: { lastFetchedBy?: string },
+): Promise<void> {
+  const lastFetchedBy = opts?.lastFetchedBy ?? "fetch-all";
+  const now = Date.now();
+
+  for (const connection of monitorsConfig.connections) {
+    const connectionId = getConnectionId(connection);
+
+    const shared = {
+      isPostSeen: (id: string) => monitorRepo.isPostSeen(connectionId, id),
+      markPostSeen: (id: string) => monitorRepo.markPostSeen(connectionId, id),
+    };
+
+    try {
+      if (connection.type === "instagram") {
+        if (!connection.igId) {
+          log.warn({ connectionId }, "fetch-all: skipping Instagram connection without igId");
+          continue;
+        }
+        await fetchInstagramConnectionPosts(connection.handle, connection.igId, downloadFilesFromUrls, {
+          ...shared,
+          limit: 0,
+          storiesMarkSeenOnly: true,
+        });
+      } else if (connection.type === "tiktok") {
+        await fetchTiktokFeed(connection.handle, downloadFilesFromUrls, {
+          ...shared,
+          limit: 0,
+        });
+      } else if (connection.type === "twitter") {
+        await fetchTwitterFeedRapidApi(connection.handle, downloadFilesFromUrls, {
+          ...shared,
+          limit: 0,
+        });
+      }
+
+      monitorRepo.upsertConnectionMeta(connectionId, now, lastFetchedBy);
+    } catch (err) {
+      log.error({ err, connectionId }, "fetch-all: connection sync failed");
+    }
   }
 }

@@ -32,6 +32,8 @@ export interface TwitterMetadata extends SnsMetadata {
 
 export interface InstagramMetadata extends SnsMetadata {
   platform: "instagram" | "instagram-story";
+  shortcode?: string;
+  username?: string;
 }
 
 export interface TikTokMetadata extends SnsMetadata {
@@ -82,22 +84,6 @@ export interface PostData<M extends SnsMetadata> {
   translatedFromLang?: string;
   timestamp?: Date;
   files: File[];
-  /** True when only a square-cropped thumbnail was available (Brightdata limitation for single-image posts) */
-  thumbnailOnly?: boolean;
-}
-
-// --------------------------------------------------------------------------
-
-/**
- * Thrown when a post is unavailable (age-restricted, removed, private, etc.)
- * rather than a transient API failure. Callers can catch this specifically
- * to surface a clean user-facing message instead of a generic error.
- */
-export class SnsUnavailableError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SnsUnavailableError";
-  }
 }
 
 // --------------------------------------------------------------------------
@@ -118,7 +104,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
    * @returns Array of platform-specific post details
    */
   findUrls(content: string): SnsLink<M>[] {
-    const matches = content.matchAll(this.URL_REGEX);
+    const matches = content.matchAll(this.URL_REGEX) ?? [];
     const results: SnsLink<M>[] = [];
 
     for (const match of matches) {
@@ -162,12 +148,10 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
 
   /**
    * Build a Discord message using the fetched content and images.
-   * If template is provided, it overrides the default message format.
    */
   abstract buildDiscordMessages(
     postData: PostData<M>,
     attachmentURLs: string[],
-    template?: string,
   ): MessageCreateOptions[];
 
   /**

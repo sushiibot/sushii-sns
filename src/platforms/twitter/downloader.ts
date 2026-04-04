@@ -5,8 +5,8 @@ import {
 } from "discord.js";
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
+import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import { fetchWithHeaders, getFileExtFromURL } from "../../utils/http";
-import { buildLinksFormatMessages } from "../../utils/template";
 import type { TweetAPIResponse } from "./types";
 import {
   SnsDownloader,
@@ -23,8 +23,8 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
 
   URL_REGEX = new RegExp(
     "https?://(?:(?:www|m|mobile)\\.)?" +
-      "(?:twitter\\.com|x\\.com)" +
-      "/(\\w+)/status/(\\d+)(/(?:photo|video)/\\d)?/?(?:\\?\\S+)?(?:#\\S+)?",
+    "(?:twitter\\.com|x\\.com)" +
+    "/(\\w+)/status/(\\d+)(/(?:photo|video)/\\d)?/?(?:\\?\\S+)?(?:#\\S+)?",
     // 'i' flag for case-insensitivity
     // 'g' flag for global search - makes String.match() exclude capture groups
     "ig",
@@ -60,6 +60,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   ): Promise<PostData<TwitterMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetchWithHeaders(req);
+    recordApiUsage(ApiUsageEndpoint.FXTWITTER_STATUS);
 
     let tweetRes: TweetAPIResponse;
     try {
@@ -83,13 +84,11 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
       throw new Error("Tweet not found: " + tweetRes.message);
     }
 
-    const media = tweetRes.tweet.media.all;
+    const media = tweetRes.tweet.media?.all ?? [];
 
-    if (!media) {
-      throw new Error("No media found in tweet");
-    }
-
-    const buffers = await this.downloadImages(media.map((m) => m.url));
+    const buffers = media.length > 0
+      ? await this.downloadImages(media.map((m) => m.url))
+      : [];
 
     const files = buffers.map((buf, i) => {
       return {
@@ -107,7 +106,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
         translatedText: tweetRes.tweet.translation?.text,
         translatedFromLang: tweetRes.tweet.translation?.source_lang_en,
         timestamp: new Date(tweetRes.tweet.created_timestamp * 1000),
-        files,
+        files, // ✅ Empty array for text-only posts — works with sendPostToChannel!
       },
     ];
   }
@@ -138,12 +137,7 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   buildDiscordMessages(
     postData: PostData<TwitterMetadata>,
     attachmentURLs: string[],
-    template?: string,
   ): MessageCreateOptions[] {
-    if (template) {
-      return buildLinksFormatMessages(template, postData, attachmentURLs);
-    }
-
     let msgs: MessageCreateOptions[] = [];
 
     // Formatted post
@@ -154,6 +148,12 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
       postData.timestamp,
     );
     mainPostContent += "\n";
+
+    // ✅ Add the tweet text/caption (this was missing!)
+    if (postData.originalText) {
+      mainPostContent += `${postData.originalText}\n\n`;
+    }
+
     mainPostContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
     mainPostContent += "\n";
 

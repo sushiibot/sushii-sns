@@ -8,6 +8,9 @@ import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, KST_TIMEZONE, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { getFileExtFromURL } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
+import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
+import { tryWithFallbacks } from "../../utils/fallback";
+import { StoryUnavailableError } from "./errors";
 import { buildLinksFormatMessages } from "../../utils/template";
 import {
   SnsDownloader,
@@ -26,72 +29,96 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   PLATFORM: Platform = "instagram-story";
 
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/([\w-]{3,})\/$/gi,
+    "https?://" +
+    "(?:www\\.)?" +
+    "instagram\\.com/" +
+    "stories/" +
+    "([\\w.-]+)" +
+    "/" +
+    "(\\d+)" +
+    "/?" +
+    "(?:\\?\\S*)?" +
+    "(?:#\\S*)?",
+    "gi"
   );
 
   protected createLinkFromMatch(
     match: RegExpMatchArray,
   ): SnsLink<InstagramMetadata> {
+    const username = match[1];
+    const storyId = match[2];
+
     return {
       url: match[0],
       metadata: {
         platform: "instagram-story",
+        username,
+        shortcode: storyId, // just use but ist actually the story id
       },
     };
   }
 
   buildApiRequest(details: SnsLink<InstagramMetadata>): Request {
     return new Request(
-      `https://instagram-scraper-api2.p.rapidapi.com/v1/stories?username_or_id_or_url=${encodeURIComponent(details.url)}`,
+      `https://instagram120.p.rapidapi.com/api/instagram/story`,
       {
-        method: "GET",
+        method: "POST",
         headers: {
-          "x-rapidapi-host": "instagram-scraper-api2.p.rapidapi.com",
+          "Content-Type": "application/json",
+          "x-rapidapi-host": "instagram120.p.rapidapi.com",
           "x-rapidapi-key": process.env.RAPID_API_KEY!,
         },
+        body: JSON.stringify({
+          username: details.metadata.username,
+          storyId: details.metadata.shortcode,
+        }),
       },
     );
   }
 
-  async fetchContent(
+  private async fetchContentViaRapidApi(
     snsLink: SnsLink<InstagramMetadata>,
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
     const response = await fetch(req);
+    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORY_SINGLE);
 
     if (response.status !== 200) {
+      const body = await response.text();
       log.error(
         {
           request: req.headers,
           responseCode: response.status,
-          responseBody: await response.text(),
+          responseBody: body,
         },
         "Failed to fetch ig API story response",
       );
 
-      throw new Error("Failed to fetch ig API story response");
+      throw new StoryUnavailableError(
+        "This Instagram story is no longer available. Stories expire after about 24 hours, or the link may be invalid.",
+      );
     }
 
-    let rawJson;
     let igStoriesRes: IgStories;
+    let rawJson;
     try {
-      rawJson = await response.json();
+      const responseText = await response.text();
 
-      // Throws if invalid
+      rawJson = JSON.parse(responseText);
       igStoriesRes = IgStoriesSchema.parse(rawJson);
     } catch (err) {
       log.error(
         {
           err,
-          response,
           responseCode: response.status,
-          body: rawJson,
+          rawBody: rawJson,
         },
-        "Failed to parse ig trigger API response",
+        "Failed to parse ig API response",
       );
-
-      throw new Error("Failed to parse ig JSON response");
+      throw new StoryUnavailableError(
+        "Could not read this Instagram story. It may have expired or been removed.",
+      );
     }
 
     log.debug(
@@ -101,75 +128,54 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
       "Fetched IG stories response",
     );
 
-    if (!igStoriesRes.data || !igStoriesRes.data.items) {
-      throw new Error("No data");
-    }
-
-    if (igStoriesRes.data.items.length === 0) {
-      throw new Error("No Instagram stories found");
+    if (!igStoriesRes.result || igStoriesRes.result.length === 0) {
+      throw new StoryUnavailableError(
+        "No story found at that link. Instagram stories expire after about 24 hours.",
+      );
     }
 
     progressCallback?.(
-      `Downloading ${igStoriesRes.data.items.length} stories...`,
+      `Downloading ${igStoriesRes.result.length} story`,
     );
 
     // Categorize by date in KST!! Could be multiple stories on different days
     // YYMMDD -> [media URLs]
     const storiesByDate = new Map<string, { date?: Date; urls: string[] }>();
 
-    for (const item of igStoriesRes.data.items) {
-      let dateKey = "unknown";
-      if (item.taken_at_date) {
-        const d = dayjs(item.taken_at_date).tz(KST_TIMEZONE);
-        dateKey = d.format("YYMMDD");
-      } else {
-        log.warn(
-          {
-            item,
-          },
-          "No taken_at_date ... bruh",
-        );
-      }
+    for (const item of igStoriesRes.result) {
+      const takenAtMs = item.taken_at * 1000;
+      const d = dayjs(takenAtMs).tz(KST_TIMEZONE);
+      const dateKey = d.format("YYMMDD");
 
-      // Default value
       const storiesDay = storiesByDate.get(dateKey) ?? {
-        date: item.taken_at_date,
+        date: new Date(takenAtMs),
         urls: [],
       };
 
-      // Video
-      if (item.video_url) {
-        storiesDay.urls.push(item.video_url);
+      let mediaUrl: string | undefined;
+
+      if (item.video_versions?.[0]?.url) {
+        mediaUrl = item.video_versions[0].url;
+      } else if (item.video_url) {
+        mediaUrl = item.video_url;
+      } else if (item.image_versions2?.candidates?.[0]?.url) {
+        mediaUrl = item.image_versions2.candidates[0].url;
+      } else if (item.thumbnail_url) {
+        mediaUrl = item.thumbnail_url;
       }
 
-      // Otherwise thumbnail image. Video stories also have thumbnail images,
-      // so only if video URL is missing
-      if (!item.video_url && item.thumbnail_url) {
-        storiesDay.urls.push(item.thumbnail_url);
+      if (mediaUrl) {
+        storiesDay.urls.push(mediaUrl);
+      } else {
+        log.warn({ item, pk: item.pk }, "No extractable media URL for story");
       }
 
-      // Need to set even if array is reference since object isn't set
       storiesByDate.set(dateKey, storiesDay);
-
-      if (!item.video_url && !item.thumbnail_url) {
-        log.warn(
-          {
-            item,
-          },
-          "No video or thumbnail URL... bruh",
-        );
-      }
     }
 
-    log.debug(
-      {
-        stories: storiesByDate,
-      },
-      "Downloading media URLs",
-    );
-
-    const postDatas = [];
-    for (const { date, urls } of storiesByDate.values()) {
+    const storyUsername = igStoriesRes.result[0]?.user?.username || "Unknown user";
+    const postDatas: PostData<InstagramMetadata>[] = [];
+    for (const [dateKey, { date, urls }] of storiesByDate.entries()) {
       const buffers = await this.downloadImages(urls);
 
       let files: File[] = buffers.map((buf, i) => {
@@ -184,9 +190,8 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
       const postData: PostData<InstagramMetadata> = {
         postLink: snsLink,
-        username:
-          igStoriesRes.data.additional_data?.user?.username || "Unknown user",
-        postID: "",
+        username: storyUsername,
+        postID: `instagram-story:${storyUsername}:${dateKey}`,
         originalText: "",
         timestamp: date,
         files,
@@ -198,6 +203,24 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     progressCallback?.("Downloaded!", true);
 
     return postDatas;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Public fetchContent — tries providers with fallbacks
+  // ---------------------------------------------------------------------------
+
+  async fetchContent(
+    snsLink: SnsLink<InstagramMetadata>,
+    progressCallback?: ProgressFn,
+  ): Promise<PostData<InstagramMetadata>[]> {
+    return tryWithFallbacks([
+      {
+        name: "RapidAPI stories",
+        fn: () => this.fetchContentViaRapidApi(snsLink, progressCallback),
+      },
+      // TODO: Add additional fallback provider here
+      // { name: "Placeholder", fn: () => ... },
+    ]);
   }
 
   // Needs to be separate so we can get the Discord attachment URLs

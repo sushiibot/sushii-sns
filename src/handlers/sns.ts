@@ -1,10 +1,7 @@
 import { type Attachment, type Message } from "discord.js";
 import logger from "../logger";
-import type { ServerConfig } from "../config/server_config";
-import { getGuildTemplate } from "../config/server_config";
 import {
   SnsDownloader,
-  SnsUnavailableError,
   type AnySnsMetadata,
   type PostData,
   type ProgressFn,
@@ -15,6 +12,8 @@ import { InstagramPostDownloader } from "../platforms/instagram-post/downloader"
 import { InstagramStoryDownloader } from "../platforms/instagram-story/downloader";
 import { TikTokDownloader } from "../platforms/tiktok/downloader";
 import { TwitterDownloader } from "../platforms/twitter/downloader";
+import { sendOpsAlert } from "../utils/opsAlert";
+import { formatSnsErrorForUser, shouldAlertOpsForSnsFailure } from "./snsErrors";
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -25,7 +24,7 @@ const downloaders = [
   new TikTokDownloader(),
 ];
 
-function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
+export function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
   let snsLinks: SnsLink<AnySnsMetadata>[] = [];
   for (const downloader of downloaders) {
     const urls = downloader.findUrls(content);
@@ -35,7 +34,7 @@ function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {
   return snsLinks;
 }
 
-function getPlatform<M extends SnsMetadata>(
+export function getPlatform<M extends SnsMetadata>(
   metadata: M,
 ): SnsDownloader<AnySnsMetadata> {
   const downloader = downloaders.find(
@@ -48,7 +47,8 @@ function getPlatform<M extends SnsMetadata>(
   return downloader;
 }
 
-async function* snsService(
+
+export async function* snsService(
   snsLinks: SnsLink<AnySnsMetadata>[],
   processFn?: ProgressFn,
 ): AsyncGenerator<PostData<AnySnsMetadata>[]> {
@@ -62,7 +62,7 @@ async function* snsService(
   }
 }
 
-export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig | null): Promise<void> {
+export async function snsHandler(msg: Message<true>): Promise<void> {
   if (!msg.channel.isSendable()) {
     return;
   }
@@ -92,6 +92,7 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
     "<:jenniekek2:821808883810041876>",
     "<a:aJennieMock:807147252673675275>",
     "<a:aJennieLaugh:695359047775289364>",
+    "<:aLISA_star:1367498109801861211>",
   ];
 
   const reaction =
@@ -157,8 +158,7 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
         }
 
         const links = attachments.map((attachment) => attachment.url);
-        const template = getGuildTemplate(serverConfig, msg.guildId);
-        const msgs = platform.buildDiscordMessages(postData, links, template);
+        const msgs = platform.buildDiscordMessages(postData, links);
 
         for (const postMsg of msgs) {
           await msg.reply({
@@ -169,14 +169,20 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
       }
     }
   } catch (err) {
-    if (err instanceof SnsUnavailableError) {
-      await msg.channel.send(`Post unavailable: ${err.message}`);
+    const { requestBody: _body, ...safeErr } = (err as any) ?? {};
+    logger.error(safeErr, "failed to process sns message");
+    const detail = formatSnsErrorForUser(err);
+    const errMsg = `oops borked the download, pls try again!!\n\n${detail}`;
+
+    if (msg.channel.isSendable() && shouldAlertOpsForSnsFailure(err)) {
+      await sendOpsAlert(
+        msg.channel,
+        "SNS download: all providers failed",
+        err,
+        `Summary for chat: ${detail}\nMessage: ${msg.url}`,
+      );
       return;
     }
-
-    logger.error(err, "failed to process sns message");
-    let errMsg = "oops borked the download, pls try again!!";
-    errMsg += `\n\n<@150443906511667200> Error: ${err}\n`;
 
     await msg.channel.send(errMsg);
   }

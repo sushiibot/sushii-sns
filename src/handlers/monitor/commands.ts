@@ -14,25 +14,90 @@ export async function registerSlashCommands(
 ): Promise<void> {
   const monitorCommand = new SlashCommandBuilder()
     .setName("monitor")
-    .setDescription("Instagram monitor commands")
+    .setDescription("SNS monitor panel + connection management")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand((sub) =>
-      sub
-        .setName("embed")
-        .setDescription("Post or update the monitor status embed in this channel")
-        .addStringOption((opt) =>
-          opt
-            .setName("username")
-            .setDescription("Instagram username to monitor")
-            .setRequired(true),
+    .addSubcommandGroup((group) =>
+      group
+        .setName("panel")
+        .setDescription("Panel setup and refresh")
+        .addSubcommand((sub) =>
+          sub.setName("setup").setDescription("Post/pin the monitor panel embed in this channel"),
+        )
+        .addSubcommand((sub) =>
+          sub.setName("refresh").setDescription("Refresh the panel embed in this channel"),
+        ),
+    )
+    .addSubcommandGroup((group) =>
+      group
+        .setName("db")
+        .setDescription("Purge monitor DB data")
+        .addSubcommand((sub) =>
+          sub
+            .setName("purge-connection")
+            .setDescription("Purge cooldown + seen-post data for one connection")
+            .addStringOption((opt) =>
+              opt
+                .setName("type")
+                .setDescription("Connection type")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Instagram", value: "instagram" },
+                  { name: "TikTok", value: "tiktok" },
+                  { name: "Twitter", value: "twitter" },
+                ),
+            )
+            .addStringOption((opt) =>
+              opt.setName("handle").setDescription("Handle/username").setRequired(true),
+            ),
+        )
+        .addSubcommand((sub) =>
+          sub
+            .setName("purge-all")
+            .setDescription("Purge all cooldown + seen-post data"),
         ),
     );
+
+  const postCommand = new SlashCommandBuilder()
+    .setName("post")
+    .setDescription("Post a message to the monitor channel")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption((opt) =>
+      opt.setName("url").setDescription("Post URL").setRequired(true),
+    );
+
+  const usageCommand = new SlashCommandBuilder()
+    .setName("usage")
+    .setDescription("Show API call counters (used / quota hint) for this bot process")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addStringOption((opt) =>
+      opt
+        .setName("scope")
+        .setDescription("What to show")
+        .setRequired(true)
+        .addChoices(
+          { name: "Providers + endpoints", value: "all" },
+          { name: "Providers only", value: "providers" },
+          { name: "Endpoints only", value: "endpoints" },
+        ),
+    );
+
+  const fetchAllCommand = new SlashCommandBuilder()
+    .setName("fetch-all")
+    .setDescription(
+      "Poll every monitor connection, mark items as seen, refresh panel (no review messages)",
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
   const rest = new REST().setToken(token);
 
   try {
     await rest.put(Routes.applicationCommands(applicationId), {
-      body: [monitorCommand.toJSON()],
+      body: [
+        monitorCommand.toJSON(),
+        postCommand.toJSON(),
+        usageCommand.toJSON(),
+        fetchAllCommand.toJSON(),
+      ],
     });
     log.info("Slash commands registered");
   } catch (err) {
