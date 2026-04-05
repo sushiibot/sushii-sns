@@ -4,7 +4,7 @@ import { Hono } from "hono";
 
 export async function startHealthCheckServer(
   healthyFn: () => boolean,
-): Promise<Server> {
+): Promise<Server<unknown>> {
   const app = new Hono();
 
   app.get("/", (c) => c.text("Hono!"));
