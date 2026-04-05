@@ -6,7 +6,7 @@ import config from "../../../config/config";
 import logger from "../../../logger";
 import type { AnySnsMetadata, InstagramMetadata, PostData } from "../../../platforms/base";
 import { tryWithFallbacks } from "../../../utils/fallback";
-import { isDevMode, loadMockJson } from "../runtime";
+import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
 import { fetchInstagramStories } from "./instagram-story";
 

@@ -16,7 +16,7 @@ import {
   upsertConnectionMeta,
   upsertPanelMessage,
   upsertPostedMessageTracking,
-} from "./db";
+} from "./queries";
 
 export type { LastFetch, PanelMessage, PostPostedCheck };
 

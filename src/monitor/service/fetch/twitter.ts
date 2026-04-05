@@ -4,7 +4,7 @@
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
-import { isDevMode, loadMockJson } from "../runtime";
+import { isDevMode, loadMockJson } from "../../runtime";
 import { selectUnseenMarkAllSlice, type DownloadFilesFromUrls } from "../fetch";
 
 function processTwitterText(item: any): string {

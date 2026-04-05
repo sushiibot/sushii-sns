@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import logger from "../../logger";
+import logger from "../logger";
 
 const log = logger.child({ module: "monitor/runtime" });
 

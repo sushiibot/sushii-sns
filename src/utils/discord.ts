@@ -11,7 +11,7 @@ import {
   type SendableChannels,
 } from "discord.js";
 import { buildInlineFormatContent, buildLinksFormatMessages, suppressLinksInTextExceptLast } from "./template";
-import type { PostTrackingSink } from "../handlers/monitor/postTracking";
+import type { PostTrackingSink } from "../monitor/data/postTracking";
 import logger from "../logger";
 
 const log = logger.child({ module: "utils/discord" });

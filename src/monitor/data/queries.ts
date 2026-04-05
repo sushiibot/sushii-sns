@@ -46,6 +46,8 @@ export function openMetadataDb(path: string): Database {
   return db;
 }
 
+// SQL query functions — internal to data/. Only import from data/repository.ts.
+
 export function getPanelMessage(
   db: Database,
   panelChannelId: string,
@@ -135,103 +137,23 @@ export function purgeAllSeenPosts(db: Database): void {
   db.exec("DELETE FROM monitor_seen_posts");
 }
 
-// === Posted Message ID Tracking ===
-
-function queryPostedMessageId(
-  db: Database,
-  connectionId: string,
-  postId: string,
-): string | null {
-  const row = db
-    .query<{ posted_message_id: string | null }, [string, string]>(
-      "SELECT posted_message_id FROM monitor_seen_posts WHERE connection_id = ? AND post_id = ?",
-    )
-    .get(connectionId, postId);
-  return row?.posted_message_id ?? null;
-}
-
-/**
- * Get the Discord message ID for a post that was sent to the socials channel.
- * Returns null if the post was seen but never posted (e.g., rejected in review).
- */
-export function getPostedMessageId(
-  db: Database,
-  connectionId: string,
-  postId: string,
-): string | null {
-  return queryPostedMessageId(db, connectionId, postId);
-}
-
-/**
- * Record that a post was successfully sent to the socials channel.
- * Upserts the posted_message_id for the given post_id.
- */
-export function markPostPosted(
-  db: Database,
-  connectionId: string,
-  postId: string,
-  messageId: string,
-): void {
-  db.query(
-    "INSERT OR IGNORE INTO monitor_seen_posts (connection_id, post_id, seen_at) VALUES (?, ?, ?)",
-  ).run(connectionId, postId, Date.now());
-
-  db.query(
-    "UPDATE monitor_seen_posts SET posted_message_id = ? WHERE connection_id = ? AND post_id = ?",
-  ).run(messageId, connectionId, postId);
-}
-
-/**
- * Clear the posted_message_id for a post (e.g., if the message was deleted).
- * Does NOT unmark the post as seen.
- */
-export function clearPostedMessageId(
-  db: Database,
-  connectionId: string,
-  postId: string,
-): void {
-  db.query(
-    "UPDATE monitor_seen_posts SET posted_message_id = NULL WHERE connection_id = ? AND post_id = ?",
-  ).run(connectionId, postId);
-}
-
-/**
- * Get all posts for a connection that have been posted (have a message ID).
- * Useful for cleanup or audit operations.
- */
-export function getPostedPosts(
-  db: Database,
-  connectionId: string,
-): Array<{ post_id: string; posted_message_id: string; seen_at: number }> {
-  return db
-    .query<
-      { post_id: string; posted_message_id: string; seen_at: number },
-      [string]
-    >(
-      "SELECT post_id, posted_message_id, seen_at FROM monitor_seen_posts WHERE connection_id = ? AND posted_message_id IS NOT NULL",
-    )
-    .all(connectionId);
-}
-
-/**
- * Check if a post was already posted to the socials channel.
- * Returns both the status and the existing message ID (if any).
- */
 export function checkIfPostWasPosted(
   db: Database,
   connectionId: string,
   postId: string,
 ): PostPostedCheck {
-  const messageId = queryPostedMessageId(db, connectionId, postId);
+  const row = db
+    .query<{ posted_message_id: string | null }, [string, string]>(
+      "SELECT posted_message_id FROM monitor_seen_posts WHERE connection_id = ? AND post_id = ?",
+    )
+    .get(connectionId, postId);
+  const messageId = row?.posted_message_id ?? null;
   if (messageId !== null) {
     return { wasPosted: true as const, messageId };
   }
   return { wasPosted: false as const, messageId: null };
 }
 
-/**
- * Upsert seen row with posted Discord message id (same semantics as /post + review Post tracking).
- */
 export function upsertPostedMessageTracking(
   db: Database,
   connectionId: string,

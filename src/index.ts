@@ -3,14 +3,10 @@ import { Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
 import config from "./config/config";
 import { loadServerConfig } from "./config/server_config";
 import { MessageCreateHandler } from "./handlers/MessageCreate";
-import { registerSlashCommands } from "./handlers/monitor/commands";
 import { handleUsageSlash } from "./handlers/usageSlash";
-import type { MonitorsConfig } from "./handlers/monitor/config";
-import { loadMonitorsConfig } from "./handlers/monitor/config";
-import { openMetadataDb } from "./handlers/monitor/db";
-import { createMonitorRepository } from "./handlers/monitor/repository";
-import { handleInteraction } from "./handlers/monitor/interactions";
-import { isDevMode } from "./handlers/monitor/runtime";
+import { loadMonitorsConfig } from "./monitor/config";
+import { isDevMode } from "./monitor/runtime";
+import { createMonitor } from "./monitor";
 import logger from "./logger";
 import { clientHealthy, startHealthCheckServer } from "./server/botHttp";
 
@@ -53,27 +49,24 @@ async function main(): Promise<void> {
     await MessageCreateHandler(message);
   });
 
-  await registerSlashCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
-
   const monitorsConfigPath = config.MONITORS_CONFIG_PATH;
-  let monitorsConfig: MonitorsConfig | null = monitorsConfigPath
+  const monitorsConfig = monitorsConfigPath
     ? loadMonitorsConfig(monitorsConfigPath)
     : null;
-  const monitorDb = monitorsConfigPath ? openMetadataDb(config.DB_PATH) : null;
-  const monitorRepo = monitorDb ? createMonitorRepository(monitorDb) : null;
-  const reloadMonitorsConfig = (): MonitorsConfig => {
-    if (!monitorsConfigPath) {
-      throw new Error("MONITORS_CONFIG_PATH not set");
-    }
-    monitorsConfig = loadMonitorsConfig(monitorsConfigPath);
-    return monitorsConfig;
-  };
 
-  if (monitorsConfigPath && monitorsConfig) {
-    log.info(
-      { connections: monitorsConfig.connections.length },
-      "Monitor feature enabled",
-    );
+  const monitor = monitorsConfig && monitorsConfigPath
+    ? createMonitor(config.DB_PATH, monitorsConfig, serverConfig, client)
+    : null;
+
+  if (monitor) {
+    await monitor.registerCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
+
+    if (monitorsConfig) {
+      log.info(
+        { connections: monitorsConfig.connections.length },
+        "Monitor feature enabled",
+      );
+    }
   }
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -85,7 +78,7 @@ async function main(): Promise<void> {
     if (
       interaction.isChatInputCommand() &&
       interaction.commandName === "fetch-all" &&
-      !monitorsConfigPath
+      !monitor
     ) {
       await interaction.reply({
         content:
@@ -95,16 +88,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (monitorsConfigPath && monitorRepo && monitorsConfig) {
-      await handleInteraction(
-        interaction,
-        client,
-        monitorsConfig,
-        serverConfig,
-        monitorRepo,
-        monitorsConfigPath,
-        reloadMonitorsConfig,
-      );
+    if (monitor) {
+      await monitor.handleInteraction(interaction);
     }
   });
 

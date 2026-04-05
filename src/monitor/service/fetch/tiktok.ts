@@ -6,7 +6,7 @@ import config from "../../../config/config";
 import logger from "../../../logger";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { tryWithFallbacks } from "../../../utils/fallback";
-import { isDevMode, loadMockJson } from "../runtime";
+import { isDevMode, loadMockJson } from "../../runtime";
 import { selectUnseenMarkAllSlice, type DownloadFilesFromUrls } from "../fetch";
 
 const log = logger.child({ module: "monitor/fetch/tiktok" });

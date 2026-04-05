@@ -4,7 +4,7 @@ import {
   Routes,
   SlashCommandBuilder,
 } from "discord.js";
-import logger from "../../logger";
+import logger from "../logger";
 
 const log = logger.child({ module: "monitor/commands" });
 

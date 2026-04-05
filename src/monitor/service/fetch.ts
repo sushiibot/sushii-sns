@@ -14,14 +14,15 @@ import type { AnySnsMetadata, PostData } from "../../platforms/base";
 import { getFileExtFromURL } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
 import { buildInlineFormatContent } from "../../utils/template";
-import type { MonitorsConfig } from "./config";
-import { findConnectionById, getConnectionId } from "./config";
-import type { MonitorRepository } from "./repository";
-import { batchToMessageOptions, buildReviewBatches } from "./embed";
+import type { MonitorsConfig } from "../config";
+import { findConnectionById, getConnectionId } from "../config";
+import type { MonitorRepository } from "../data/repository";
+import { batchToMessageOptions, buildReviewBatches } from "../view/review";
 import { fetchInstagramConnectionPosts } from "./fetch/instagram";
 import { fetchTiktokFeed } from "./fetch/tiktok";
 import { fetchTwitterFeedRapidApi } from "./fetch/twitter";
-import { createReview, deleteReview, type ReviewState } from "./review";
+import type { ReviewState } from "./review/types";
+import type { ReviewStore } from "./review/store";
 
 /** Media download helper injected from the monitor orchestrator (HEIC conversion, etc.). */
 export type DownloadFilesFromUrls = (urls: string[]) => Promise<
@@ -87,6 +88,7 @@ export async function fetchConnectionAndCreateReviews(
   serverConfig: ServerConfig | null,
   monitorRepo: MonitorRepository,
   connectionId: string,
+  reviewStore: ReviewStore,
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -213,7 +215,7 @@ export async function fetchConnectionAndCreateReviews(
       messageIds: [],
     };
 
-    const reviewId = createReview(reviewState);
+    const reviewId = reviewStore.create(reviewState);
 
     try {
       const batches = buildReviewBatches(reviewState, reviewId);
@@ -232,7 +234,7 @@ export async function fetchConnectionAndCreateReviews(
       if (postData.postID) monitorRepo.markPostSeen(connectionId, postData.postID);
     } catch (err) {
       log.error({ err, reviewId }, "Failed to send review message");
-      deleteReview(reviewId);
+      reviewStore.delete(reviewId);
     }
   }
 

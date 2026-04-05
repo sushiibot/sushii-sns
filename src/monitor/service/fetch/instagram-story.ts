@@ -5,7 +5,7 @@ import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { tryWithFallbacks } from "../../../utils/fallback";
-import { isDevMode, loadMockJson } from "../runtime";
+import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
 
 /**

@@ -1,5 +1,5 @@
 import type { Client, SendableChannels } from "discord.js";
-import logger from "../../logger";
+import logger from "../logger";
 import type { MonitorsConfig } from "./config";
 
 const log = logger.child({ module: "monitor/log-channel" });
