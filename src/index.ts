@@ -1,3 +1,4 @@
+import "./tracing";
 import { Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
 import config from "./config/config";
 import { loadServerConfig } from "./config/server_config";

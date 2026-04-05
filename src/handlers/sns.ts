@@ -1,3 +1,4 @@
+import { SpanStatusCode } from "@opentelemetry/api";
 import { type Attachment, type Message } from "discord.js";
 import logger from "../logger";
 import {
@@ -12,6 +13,7 @@ import { InstagramPostDownloader } from "../platforms/instagram-post/downloader"
 import { InstagramStoryDownloader } from "../platforms/instagram-story/downloader";
 import { TikTokDownloader } from "../platforms/tiktok/downloader";
 import { TwitterDownloader } from "../platforms/twitter/downloader";
+import { tracer } from "../tracing";
 import { formatSnsErrorForUser } from "./snsErrors";
 
 const log = logger.child({ module: "snsHandler" });
@@ -54,9 +56,33 @@ export async function* snsService(
   for (const snsLink of snsLinks) {
     const platform = getPlatform(snsLink.metadata);
 
-    const content = await platform.fetchContent(snsLink, processFn);
+    const content = await tracer.startActiveSpan(
+      "sns.fetch",
+      {
+        attributes: {
+          "sns.platform": snsLink.metadata.platform,
+          "sns.url": snsLink.url,
+        },
+      },
+      async (span) => {
+        try {
+          const result = await platform.fetchContent(snsLink, processFn);
+          span.setAttribute("sns.post_count", result.length);
+          span.setAttribute(
+            "sns.file_count",
+            result.reduce((acc, p) => acc + p.files.length, 0),
+          );
+          return result;
+        } catch (err) {
+          span.recordException(err as Error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw err;
+        } finally {
+          span.end();
+        }
+      },
+    );
 
-    // Generator yields the message
     yield content;
   }
 }
@@ -139,40 +165,58 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
     return progressPromise;
   };
 
-  try {
-    for await (const postDatas of snsService(posts, progressUpdater)) {
-      for (const postData of postDatas) {
-        const platform = getPlatform(postData.postLink.metadata);
+  await tracer.startActiveSpan(
+    "sns.handler",
+    {
+      attributes: {
+        "discord.channel_id": msg.channelId,
+        "discord.guild_id": msg.guildId,
+        "discord.user_id": msg.author.id,
+        "sns.link_count": posts.length,
+      },
+    },
+    async (span) => {
+      try {
+        for await (const postDatas of snsService(posts, progressUpdater)) {
+          for (const postData of postDatas) {
+            const platform = getPlatform(postData.postLink.metadata);
 
-        // 1. Send images first
-        // 2. Get the links to images
-        // 3. Send the message with the links
-        const fileMsgs = platform.buildDiscordAttachments(postData);
+            // 1. Send images first
+            // 2. Get the links to images
+            // 3. Send the message with the links
+            const fileMsgs = platform.buildDiscordAttachments(postData);
 
-        const attachments: Attachment[] = [];
+            const attachments: Attachment[] = [];
 
-        for (const fileMsg of fileMsgs) {
-          const filesMsg = await msg.channel.send(fileMsg);
-          attachments.push(...filesMsg.attachments.values());
+            for (const fileMsg of fileMsgs) {
+              const filesMsg = await msg.channel.send(fileMsg);
+              attachments.push(...filesMsg.attachments.values());
+            }
+
+            const links = attachments.map((attachment) => attachment.url);
+            const msgs = platform.buildDiscordMessages(postData, links);
+
+            for (const postMsg of msgs) {
+              await msg.reply({
+                ...postMsg,
+                allowedMentions: { parse: [] },
+              });
+            }
+          }
         }
+      } catch (err) {
+        span.recordException(err as Error);
+        span.setStatus({ code: SpanStatusCode.ERROR });
 
-        const links = attachments.map((attachment) => attachment.url);
-        const msgs = platform.buildDiscordMessages(postData, links);
+        const { requestBody: _body, ...safeErr } = (err as any) ?? {};
+        logger.error(safeErr, "failed to process sns message");
+        const detail = formatSnsErrorForUser(err);
+        const errMsg = `oops borked the download, pls try again!!\n\n${detail}`;
 
-        for (const postMsg of msgs) {
-          await msg.reply({
-            ...postMsg,
-            allowedMentions: { parse: [] },
-          });
-        }
+        await msg.channel.send(errMsg);
+      } finally {
+        span.end();
       }
-    }
-  } catch (err) {
-    const { requestBody: _body, ...safeErr } = (err as any) ?? {};
-    logger.error(safeErr, "failed to process sns message");
-    const detail = formatSnsErrorForUser(err);
-    const errMsg = `oops borked the download, pls try again!!\n\n${detail}`;
-
-    await msg.channel.send(errMsg);
-  }
+    },
+  );
 }
