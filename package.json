@@ -25,6 +25,11 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-grpc": "^0.214.0",
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.214.0",
+    "@opentelemetry/sdk-metrics": "^2.6.1",
+    "@opentelemetry/sdk-node": "^0.214.0",
     "dayjs": "^1.11.13",
     "discord.js": "^14.25.1",
     "dotenv": "^16.4.7",
