@@ -1,4 +1,4 @@
-import "./tracing";
+import { otelSDK } from "./tracing";
 import { Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
 import config from "./config/config";
 import { loadServerConfig } from "./config/server_config";
@@ -100,6 +100,7 @@ async function main(): Promise<void> {
     log.info("Received SIGTERM, shutting down...");
     await client.destroy();
     await httpServer.stop();
+    await otelSDK?.shutdown();
     log.info("bye");
   });
 
