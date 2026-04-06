@@ -28,12 +28,17 @@ function runMigrations(db: Database, migrations: string[][]): void {
   const row = db.query("PRAGMA user_version").get() as { user_version: number };
   const currentVersion = row.user_version;
 
-  for (let i = currentVersion; i < migrations.length; i++) {
-    log.info({ version: i }, "Running DB migration");
-    for (const sql of migrations[i]) {
+  const migrate = db.transaction((sqls: string[], version: number) => {
+    for (const sql of sqls) {
       db.exec(sql);
     }
-    db.exec(`PRAGMA user_version = ${i + 1}`);
+    // PRAGMA cannot use parameterized queries; version is always an array index (integer)
+    db.exec(`PRAGMA user_version = ${version}`);
+  });
+
+  for (let i = currentVersion; i < migrations.length; i++) {
+    log.info({ version: i }, "Running DB migration");
+    migrate(migrations[i], i + 1);
   }
 }
 
@@ -130,14 +135,14 @@ export function purgeAllConnectionMeta(db: Database): void {
 }
 
 export function purgeConnectionSeenPosts(db: Database, connectionId: string): void {
-  db.query("DELETE FROM monitor_seen_posts WHERE connection_id = ?").run(connectionId);
+  db.query("DELETE FROM monitor_seen_posts WHERE connection_id = ? AND posted_message_id IS NULL").run(connectionId);
 }
 
 export function purgeAllSeenPosts(db: Database): void {
   db.exec("DELETE FROM monitor_seen_posts");
 }
 
-export function checkIfPostWasPosted(
+export function checkIfPostWasPublished(
   db: Database,
   connectionId: string,
   postId: string,

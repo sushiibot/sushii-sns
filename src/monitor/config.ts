@@ -1,6 +1,5 @@
 import { readFileSync } from "fs";
 import { z } from "zod";
-import { writeFileSync } from "fs";
 
 export const ConnectionTypeSchema = z.enum(["instagram", "tiktok", "twitter"]);
 
@@ -46,16 +45,11 @@ export function loadMonitorsConfig(path: string): MonitorsConfig {
   return MonitorsConfigSchema.parse(json);
 }
 
-/**
- * Save monitors config to disk.
- */
-export function saveMonitorsConfig(path: string, config: MonitorsConfig): void {
-  const validated = MonitorsConfigSchema.parse(config);
-  writeFileSync(path, JSON.stringify(validated, null, 2), "utf-8");
-}
-
 export function findConnectionById(config: MonitorsConfig, connectionId: string): Connection | null {
-  const [type, handle] = connectionId.split(":");
+  const colonIdx = connectionId.indexOf(":");
+  if (colonIdx === -1) return null;
+  const type = connectionId.slice(0, colonIdx);
+  const handle = connectionId.slice(colonIdx + 1);
   if (!type || !handle) return null;
   return config.connections.find((c) => c.type === type && c.handle === handle) ?? null;
 }

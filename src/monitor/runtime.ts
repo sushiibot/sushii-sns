@@ -1,8 +1,5 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import logger from "../logger";
-
-const log = logger.child({ module: "monitor/runtime" });
 
 export function isDevMode(): boolean {
   const lifecycle = process.env.npm_lifecycle_event;
@@ -14,10 +11,5 @@ export function isDevMode(): boolean {
 export function loadMockJson<T>(fileName: string): T {
   const path = join(process.cwd(), "mocks", "monitor", fileName);
   const raw = readFileSync(path, "utf-8");
-  try {
-    return JSON.parse(raw) as T;
-  } catch (err) {
-    log.error({ err, path }, "Invalid monitor mock JSON");
-    throw err;
-  }
+  return JSON.parse(raw) as T;
 }

@@ -2,19 +2,17 @@ import {
   ActionRowBuilder,
   MessageFlags,
   type ChatInputCommandInteraction,
-  type Client,
   type SendableChannels,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
 } from "discord.js";
-import { isConnectionMonitored, type ServerConfig } from "../../config/server_config";
+import { isConnectionMonitored } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, SnsLink } from "../../platforms/base";
 import { MediaTooLargeError, sendPostToChannel } from "../../utils/discord";
 import { parseUsernameFromUrl } from "../../utils/socialUrls";
-import type { MonitorsConfig } from "../config";
-import { connectionIdFromPlatformUsername } from "../service/connectionId";
+import { ConnectionTypeSchema, getConnectionId, type ConnectionType, type MonitorsConfig } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { findAllSnsLinks, snsService } from "../../handlers/sns";
 
@@ -28,7 +26,6 @@ export class PostHandler {
   constructor(
     private readonly repo: MonitorRepository,
     private readonly config: MonitorsConfig,
-    private readonly serverConfig: ServerConfig | null,
   ) {}
 
   async promptRepostConfirmation(
@@ -111,11 +108,12 @@ export class PostHandler {
       const link = posts[0];
       const platform = link.metadata.platform;
       const normalizedPlatform = platform.replace(/-story$/, "");
+      const connectionTypeParsed = ConnectionTypeSchema.safeParse(normalizedPlatform);
 
       const { username, postId, canCheckBeforeFetch } = extractConnectionInfo(link);
 
-      if (canCheckBeforeFetch && username && postId) {
-        const preConnectionId = connectionIdFromPlatformUsername(normalizedPlatform, username);
+      if (canCheckBeforeFetch && username && postId && connectionTypeParsed.success) {
+        const preConnectionId = getConnectionId({ type: connectionTypeParsed.data, handle: username });
         const confirmed = await this.checkDuplicateBeforeFetch(
           preConnectionId,
           postId,
@@ -130,11 +128,16 @@ export class PostHandler {
         return;
       }
 
-      if ((platform === "instagram" || platform === "instagram-story") && postData.username) {
-        const igConnectionId = connectionIdFromPlatformUsername(
-          normalizedPlatform,
-          postData.username,
-        );
+      // Instagram URLs don't include the username, so canCheckBeforeFetch is
+      // false for Instagram. We do the duplicate check here after fetching post
+      // metadata, which gives us the username needed to look up the connection.
+      // Twitter and TikTok include enough info in the URL to check before fetching.
+      if (
+        connectionTypeParsed.success &&
+        (platform === "instagram" || platform === "instagram-story") &&
+        postData.username
+      ) {
+        const igConnectionId = getConnectionId({ type: connectionTypeParsed.data, handle: postData.username });
         if (isConnectionMonitored(this.config, igConnectionId)) {
           const confirmed = await this.checkDuplicateBeforeFetch(
             igConnectionId,
@@ -146,15 +149,16 @@ export class PostHandler {
       }
 
       const trackInDb =
+        connectionTypeParsed.success &&
         (platform === "instagram" || platform === "instagram-story") &&
         !!postData.username &&
         isConnectionMonitored(
           this.config,
-          connectionIdFromPlatformUsername(normalizedPlatform, postData.username),
+          getConnectionId({ type: connectionTypeParsed.data, handle: postData.username }),
         );
 
-      const connectionIdForDb = trackInDb
-        ? connectionIdFromPlatformUsername(normalizedPlatform, postData.username!)
+      const connectionIdForDb = trackInDb && connectionTypeParsed.success
+        ? getConnectionId({ type: connectionTypeParsed.data, handle: postData.username! })
         : undefined;
 
       const result = await sendPostToChannel(socialsChannel as SendableChannels, postData, {
@@ -179,7 +183,7 @@ export class PostHandler {
     } catch (err) {
       if (err instanceof MediaTooLargeError) {
         await interaction.editReply(
-          `❌ Media file is too large to upload (${(err.size / 1024 / 1024).toFixed(1)}MB). Discord's limit is 8MB.\n` +
+          `❌ Media file is too large to upload to Discord (${(err.size / 1024 / 1024).toFixed(1)} MB).\n` +
             `View the post directly: ${postUrl}`,
         );
         return;
@@ -187,10 +191,11 @@ export class PostHandler {
 
       const { requestBody: _body, ...safeErr } = (err as any) ?? {};
       log.error(safeErr, "/post command failed");
-      await interaction.followUp({
-        content: `❌ Error: ${String(err)}`,
-        flags: MessageFlags.Ephemeral,
-      });
+      try {
+        await interaction.editReply("❌ Something went wrong. Please try again.");
+      } catch {
+        // editReply can fail if deferReply never completed; swallow secondary error
+      }
     }
   }
 
@@ -201,7 +206,7 @@ export class PostHandler {
   ): Promise<boolean> {
     if (!isConnectionMonitored(this.config, connectionId)) return true;
 
-    const check = this.repo.checkIfPostWasPosted(connectionId, postId);
+    const check = this.repo.checkIfPostWasPublished(connectionId, postId);
 
     if (check.wasPosted) {
       const result = await this.promptRepostConfirmation(

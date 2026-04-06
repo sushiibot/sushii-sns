@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { PostTrackingSink } from "./postTracking";
 import {
-  checkIfPostWasPosted,
+  checkIfPostWasPublished,
   getConnectionMeta,
   getPanelMessage,
   isPostSeen,
@@ -39,7 +39,7 @@ export interface MonitorRepository extends PostTrackingSink {
   purgeAllConnectionMeta(): void;
   purgeConnectionSeenPosts(connectionId: string): void;
   purgeAllSeenPosts(): void;
-  checkIfPostWasPosted(connectionId: string, postId: string): PostPostedCheck;
+  checkIfPostWasPublished(connectionId: string, postId: string): PostPostedCheck;
 }
 
 export function createMonitorRepository(db: Database): MonitorRepository {
@@ -77,8 +77,8 @@ export function createMonitorRepository(db: Database): MonitorRepository {
     purgeAllSeenPosts() {
       purgeAllSeenPosts(db);
     },
-    checkIfPostWasPosted(connectionId: string, postId: string) {
-      return checkIfPostWasPosted(db, connectionId, postId);
+    checkIfPostWasPublished(connectionId: string, postId: string) {
+      return checkIfPostWasPublished(db, connectionId, postId);
     },
   };
 }

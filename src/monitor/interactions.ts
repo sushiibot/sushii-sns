@@ -19,7 +19,7 @@ import type { PostHandler } from "./handlers/post";
 
 const log = logger.child({ module: "monitor/interactions" });
 
-function requireManageGuild(interaction: ChatInputCommandInteraction): boolean {
+function checkManageGuild(interaction: ChatInputCommandInteraction): boolean {
   if (!interaction.guildId) return false;
   if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return false;
   return true;
@@ -79,21 +79,24 @@ export function createInteractionDispatcher(
       }
 
       if (interaction.isChatInputCommand()) {
-        const cmd = interaction as ChatInputCommandInteraction;
+        const cmd = interaction;
 
         if (cmd.commandName === "fetch-all") {
           await panelHandler.handleFetchAll(cmd);
           return;
         }
 
-        if (cmd.commandName !== "monitor" && cmd.commandName !== "post") return;
+        if (cmd.commandName !== "monitor" && cmd.commandName !== "post") {
+          log.warn({ commandName: cmd.commandName }, "Unrecognized slash command — command may be registered but missing a dispatch entry");
+          return;
+        }
 
         if (!cmd.guildId) {
           await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
           return;
         }
 
-        if (!requireManageGuild(cmd)) {
+        if (!checkManageGuild(cmd)) {
           await cmd.reply({
             content: "You need Manage Guild permission to use this command.",
             flags: MessageFlags.Ephemeral,

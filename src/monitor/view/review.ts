@@ -12,7 +12,7 @@ import {
   type MessageCreateOptions,
   type MessageEditOptions,
 } from "discord.js";
-import { MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
+import { chunkArray, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import {
   REVIEW_EDIT_PREFIX,
   REVIEW_POST_PREFIX,
@@ -99,7 +99,8 @@ function buildSimpleComponents(
   }
 
   const gallery = new MediaGalleryBuilder();
-  for (let i = 0; i < MAX_ATTACHMENTS_PER_MESSAGE; i++) {
+  const chunkLen = Math.min(MAX_ATTACHMENTS_PER_MESSAGE, allFileNames.length - startIdx);
+  for (let i = 0; i < chunkLen; i++) {
     const globalIdx = startIdx + i;
     if (globalIdx >= allFileNames.length) break;
 
@@ -138,7 +139,7 @@ function buildControlComponents(
   }
 
   if (allFileNames.length > 1) {
-    const options = allFileNames.map((name, i) => {
+    const fileOptions = allFileNames.map((name, i) => {
       const ext = name.split(".").pop()?.toUpperCase() ?? "FILE";
       const chunkNum = Math.floor(i / MAX_ATTACHMENTS_PER_MESSAGE) + 1;
       const label = chunkNum > 1
@@ -151,11 +152,13 @@ function buildControlComponents(
         .setDefault(state.removedIndices.has(i));
     });
 
+    const options = fileOptions.slice(0, 25); // Discord limit: 25 options per select menu
+
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(`${REVIEW_REMOVE_PREFIX}${reviewId}`)
       .setPlaceholder(`Select images to remove from all ${allFileNames.length} images...`)
       .setMinValues(0)
-      .setMaxValues(allFileNames.length)
+      .setMaxValues(options.length)
       .addOptions(options);
 
     components.push(
@@ -190,14 +193,6 @@ function buildControlComponents(
   );
 
   return components;
-}
-
-function chunkArray<T>(arr: T[], chunkSize: number): T[][] {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += chunkSize) {
-    chunks.push(arr.slice(i, i + chunkSize));
-  }
-  return chunks;
 }
 
 /**

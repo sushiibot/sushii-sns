@@ -23,9 +23,9 @@ export function createMonitor(
   const repo = createMonitorRepository(db);
   const reviewStore = new ReviewStore();
   const postQueue = new PostQueue();
-  const panelHandler = new PanelHandler(repo, reviewStore, postQueue, config, serverConfig, client);
+  const panelHandler = new PanelHandler(repo, reviewStore, config, serverConfig, client);
   const reviewHandler = new ReviewHandler(reviewStore, postQueue, repo, config);
-  const postHandler = new PostHandler(repo, config, serverConfig);
+  const postHandler = new PostHandler(repo, config);
 
   return {
     handleInteraction: createInteractionDispatcher(panelHandler, reviewHandler, postHandler),
