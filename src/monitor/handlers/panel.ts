@@ -1,4 +1,5 @@
 import {
+  GuildMember,
   MessageFlags,
   PermissionFlagsBits,
   type ButtonInteraction,
@@ -8,24 +9,37 @@ import {
 } from "discord.js";
 import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
-import type { MonitorsConfig } from "../config";
-import { findConnectionById, getConnectionId } from "../config";
+import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
+import { buildInlineFormatContent } from "../../utils/template";
+import type { MonitorsConfig, ConnectionType } from "../config";
+import { ConnectionTypeSchema, findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
-import { buildPanelEmbed } from "../view/panel";
-import { fetchConnectionAndCreateReviews, syncAllMonitorConnections } from "../service/fetch";
+import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
+import { batchToMessageOptions, buildReviewBatches } from "../view/review";
+import { syncAllMonitorConnections, fetchConnectionPosts, downloadFilesFromUrls } from "../service/fetch";
 import { sendMonitorLog } from "../log_channel";
+import type { ReviewState } from "../service/review/types";
 import type { ReviewStore } from "../service/review/store";
-import type { PostQueue } from "../service/queue";
 
 const log = logger.child({ module: "monitor/handlers/panel" });
 
+function getDisplayName(interaction: ButtonInteraction): string {
+  const member = interaction.member;
+  if (member instanceof GuildMember) return member.displayName;
+  return interaction.user.displayName ?? interaction.user.username;
+}
+
 export class PanelHandler {
-  private panelPollInProgress = false;
+  // Per-connection lock set — prevents concurrent fetches for the same connection
+  // if a user clicks a button rapidly, without blocking unrelated connections.
+  private activeFetches = new Set<string>();
+
+  private readonly MAX_REVIEWS_PER_POLL = 3;
+  private readonly MAX_STORIES_PER_POLL = 10;
 
   constructor(
     private readonly repo: MonitorRepository,
     private readonly reviewStore: ReviewStore,
-    private readonly postQueue: PostQueue,
     private readonly config: MonitorsConfig,
     private readonly serverConfig: ServerConfig | null,
     private readonly client: Client,
@@ -43,9 +57,9 @@ export class PanelHandler {
       return;
     }
 
-    if (this.panelPollInProgress) {
+    if (this.activeFetches.has(connectionId)) {
       await interaction.reply({
-        content: "A fetch is already in progress. Please wait until it finishes.",
+        content: "A fetch for this connection is already in progress.",
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -87,23 +101,18 @@ export class PanelHandler {
       }
     }
 
-    this.panelPollInProgress = true;
+    this.activeFetches.add(connectionId);
     try {
+      // Defer before any network calls so the interaction token doesn't expire.
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
       await sendMonitorLog(
         this.client,
         this.config,
         `Poll started: \`${connectionId}\` by ${interaction.user.username}`,
       );
 
-      await fetchConnectionAndCreateReviews(
-        interaction,
-        this.client,
-        this.config,
-        this.serverConfig,
-        this.repo,
-        connectionId,
-        this.reviewStore,
-      );
+      await this.fetchConnectionAndCreateReviews(interaction, connectionId);
 
       await this.refreshPanelEmbed();
 
@@ -113,7 +122,7 @@ export class PanelHandler {
         `Poll finished: \`${connectionId}\` by ${interaction.user.username}`,
       );
     } finally {
-      this.panelPollInProgress = false;
+      this.activeFetches.delete(connectionId);
     }
   }
 
@@ -124,10 +133,24 @@ export class PanelHandler {
     const channel = await this.client.channels.fetch(this.config.panel_channel_id);
     if (!channel || !channel.isTextBased()) return false;
 
-    const msg = await channel.messages.fetch(panelMessage.message_id);
-    const connectionsMeta = this.buildPanelConnectionsMeta();
-    const embedData = buildPanelEmbed(connectionsMeta as any);
-    await msg.edit(embedData);
+    try {
+      const msg = await channel.messages.fetch(panelMessage.message_id);
+      const connectionsMeta = this.buildPanelConnectionsMeta();
+      const embedData = buildPanelEmbed(connectionsMeta);
+      await msg.edit(embedData);
+    } catch (err) {
+      // Discord "Unknown Message" (10008) means the panel message was deleted — expected, log at warn.
+      // Any other error is unexpected and should surface as an error.
+      const isUnknownMessage =
+        (err as any)?.code === 10008 ||
+        (err instanceof Error && err.message.includes("Unknown Message"));
+      if (isUnknownMessage) {
+        log.warn({ err }, "Panel message not found or deleted, skipping embed refresh");
+      } else {
+        log.error({ err }, "Unexpected error refreshing panel embed");
+      }
+      return false;
+    }
     return true;
   }
 
@@ -137,7 +160,7 @@ export class PanelHandler {
     }
 
     const connectionsMeta = this.buildPanelConnectionsMeta();
-    const embedData = buildPanelEmbed(connectionsMeta as any);
+    const embedData = buildPanelEmbed(connectionsMeta);
 
     const msg = await (interaction.channel as SendableChannels).send(embedData);
 
@@ -165,6 +188,12 @@ export class PanelHandler {
       return;
     }
 
+    // Lock all connections during fetch-all to prevent concurrent per-connection polls.
+    // Only acquire locks for IDs not already held by a running per-connection poll so
+    // that we don't steal and then release a lock we didn't own.
+    const connectionIds = this.config.connections.map(c => getConnectionId(c));
+    const idsToLock = connectionIds.filter(id => !this.activeFetches.has(id));
+    for (const id of idsToLock) this.activeFetches.add(id);
     try {
       await syncAllMonitorConnections(this.config, this.repo, {
         lastFetchedBy: cmd.user.username,
@@ -183,6 +212,8 @@ export class PanelHandler {
       await cmd.editReply({
         content: "Something went wrong while syncing.",
       });
+    } finally {
+      for (const id of idsToLock) this.activeFetches.delete(id);
     }
   }
 
@@ -223,9 +254,15 @@ export class PanelHandler {
   async handleDbPurgeConnection(cmd: ChatInputCommandInteraction): Promise<void> {
     await cmd.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const type = cmd.options.getString("type", true);
+    const rawType = cmd.options.getString("type", true);
+    const parseResult = ConnectionTypeSchema.safeParse(rawType);
+    if (!parseResult.success) {
+      await cmd.editReply({ content: `Invalid connection type: \`${rawType}\`.` });
+      return;
+    }
+    const type = parseResult.data; // now properly typed as ConnectionType
     const handle = cmd.options.getString("handle", true);
-    const connectionId = `${type}:${handle}`;
+    const connectionId = getConnectionId({ type, handle });
 
     try {
       this.repo.purgeConnectionSeenPosts(connectionId);
@@ -264,7 +301,7 @@ export class PanelHandler {
     await cmd.editReply({ content: "Purged DB for all connections." });
   }
 
-  private buildPanelConnectionsMeta() {
+  private buildPanelConnectionsMeta(): PanelConnectionMeta[] {
     return this.config.connections.map((c) => {
       const id = getConnectionId(c);
       return {
@@ -274,5 +311,123 @@ export class PanelHandler {
         lastFetch: this.repo.getConnectionMeta(id),
       };
     });
+  }
+
+  private async fetchConnectionAndCreateReviews(
+    interaction: ButtonInteraction,
+    connectionId: string,
+  ): Promise<void> {
+    const connection = findConnectionById(this.config, connectionId);
+    if (!connection) {
+      await interaction.editReply({ content: "Unknown connection." });
+      return;
+    }
+
+    await interaction.editReply("Fetching latest posts...");
+
+    let posts: PostData<AnySnsMetadata>[] = [];
+    try {
+      posts = await fetchConnectionPosts(connection, downloadFilesFromUrls, {
+        isPostSeen: (id) => this.repo.isPostSeen(connectionId, id),
+        markPostSeen: (id) => this.repo.markPostSeen(connectionId, id),
+        limit: this.MAX_REVIEWS_PER_POLL,
+        storiesLimit: this.MAX_STORIES_PER_POLL,
+      });
+    } catch (err) {
+      log.error({ err, connectionId }, "Failed to fetch connection posts");
+      await interaction.editReply("Failed to fetch posts. Please try again.");
+      return;
+    }
+
+    if (posts.length === 0) {
+      this.repo.upsertConnectionMeta(connectionId, Date.now(), getDisplayName(interaction));
+      await interaction.editReply("No new posts found.");
+      return;
+    }
+
+    const reviewChannel = interaction.channel;
+    if (!reviewChannel || !("send" in reviewChannel)) {
+      await interaction.editReply("Cannot send review messages in this channel.");
+      return;
+    }
+
+    let postsToReview: PostData<AnySnsMetadata>[] = [];
+    let stories: PostData<AnySnsMetadata>[] = [];
+    let regularPosts: PostData<AnySnsMetadata>[] = [];
+
+    if (connection.type === "instagram") {
+      const isInstagramStory = (p: PostData<AnySnsMetadata>): boolean =>
+        p.postLink?.metadata?.platform === "instagram-story";
+
+      stories = posts.filter(isInstagramStory);
+      regularPosts = posts.filter(p => !isInstagramStory(p));
+      postsToReview = [
+        // stories already capped to MAX_STORIES_PER_POLL by fetchConnectionPosts storiesLimit
+        ...stories,
+        ...regularPosts.slice(0, this.MAX_REVIEWS_PER_POLL),
+      ];
+    } else {
+      postsToReview = posts.slice(0, this.MAX_REVIEWS_PER_POLL);
+    }
+
+    const socialsChannelId = this.config.socials_channel_id;
+    let reviewCount = 0;
+
+    for (const postData of postsToReview) {
+      if (!postData.postID) continue;
+
+      // PostData<AnySnsMetadata> is not directly assignable to PostData<SnsMetadata> due to
+      // TypeScript's generic invariance, but buildInlineFormatContent only accesses base
+      // SnsMetadata fields (platform, username, postLink.url, originalText, timestamp), so
+      // the cast is safe for all concrete metadata types.
+      const renderedContent = buildInlineFormatContent(this.config.template, postData as PostData<SnsMetadata>);
+
+      const reviewState: ReviewState = {
+        postData,
+        connectionId,
+        removedIndices: new Set<number>(),
+        customContent: null,
+        renderedContent,
+        socialsChannelId,
+        format: this.config.format,
+        template: this.config.template,
+        fetcherUserId: interaction.user.id,
+        fileNames: postData.files.map((f, i) => `media-${i}.${f.ext}`),
+        messageIds: [],
+      };
+
+      const reviewId = this.reviewStore.create(reviewState);
+
+      try {
+        const batches = buildReviewBatches(reviewState, reviewId);
+        const messageIds: string[] = [];
+
+        for (const batch of batches) {
+          const msg = await (reviewChannel as SendableChannels).send(
+            batchToMessageOptions(batch),
+          );
+          messageIds.push(msg.id);
+        }
+
+        this.reviewStore.update(reviewId, { messageIds });
+        reviewCount++;
+      } catch (err) {
+        log.error({ err, reviewId }, "Failed to send review message");
+        this.reviewStore.delete(reviewId);
+      }
+    }
+
+    this.repo.upsertConnectionMeta(connectionId, Date.now(), getDisplayName(interaction));
+
+    if (connection.type === "instagram") {
+      const cappedPosts = regularPosts.slice(0, this.MAX_REVIEWS_PER_POLL);
+      await interaction.editReply(
+        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${stories.length} ${stories.length === 1 ? "story" : "stories"} + ${cappedPosts.length} post${cappedPosts.length === 1 ? "" : "s"}). Review messages created below.`,
+      );
+    } else {
+      await interaction.editReply(
+        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"}. Review messages created below.`,
+      );
+    }
   }
 }

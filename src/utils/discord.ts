@@ -185,11 +185,22 @@ export async function sendPostToChannel(
       // Text-only post
       await sendAndTrack(suppressLinksInTextExceptLast?.(content) ?? content);
     } else {
-      await sendAndTrack(content);
-      for (const chunk of chunks) {
-        const sent = await channel.send({ files: chunk, flags });
-        result.messageIds.push(sent.id);
-        result.messages.push(sent);
+      const sentMessages: Message[] = [];
+      const textMsg = await sendAndTrack(content);
+      sentMessages.push(textMsg);
+      try {
+        for (const chunk of chunks) {
+          const sent = await channel.send({ files: chunk, flags });
+          result.messageIds.push(sent.id);
+          result.messages.push(sent);
+          sentMessages.push(sent);
+        }
+      } catch (err) {
+        // Clean up already-sent messages to avoid orphaned text in the channel
+        for (const msg of sentMessages) {
+          try { await msg.delete(); } catch { /* ignore */ }
+        }
+        throw err;
       }
     }
   } else {
@@ -199,28 +210,39 @@ export async function sendPostToChannel(
     );
     const chunks = chunkArray(attachments, MAX_ATTACHMENTS_PER_MESSAGE);
     const cdnUrls: string[] = [];
+    const sentMessages: Message[] = [];
 
-    // Upload all media first to get Discord CDN URLs
-    for (const chunk of chunks) {
-      const sent = await channel.send({ files: chunk, flags });
-      result.messageIds.push(sent.id);
-      result.messages.push(sent);
-      for (const att of sent.attachments.values()) {
-        cdnUrls.push(att.url);
+    try {
+      // Upload all media first to get Discord CDN URLs
+      for (const chunk of chunks) {
+        const sent = await channel.send({ files: chunk, flags });
+        result.messageIds.push(sent.id);
+        result.messages.push(sent);
+        sentMessages.push(sent);
+        for (const att of sent.attachments.values()) {
+          cdnUrls.push(att.url);
+        }
       }
-    }
 
-    // Build and send formatted text messages with CDN URLs
-    const textMsgs = buildLinksFormatMessages(
-      template ?? "",
-      postData as any,
-      cdnUrls,
-      contentOverride,
-    );
-    for (const msg of textMsgs) {
-      const sent = await channel.send({ ...msg, flags });
-      result.messageIds.push(sent.id);
-      result.messages.push(sent);
+      // Build and send formatted text messages with CDN URLs
+      const textMsgs = buildLinksFormatMessages(
+        template ?? "",
+        postData as any,
+        cdnUrls,
+        contentOverride,
+      );
+      for (const msg of textMsgs) {
+        const sent = await channel.send({ ...msg, flags });
+        result.messageIds.push(sent.id);
+        result.messages.push(sent);
+        sentMessages.push(sent);
+      }
+    } catch (err) {
+      // Clean up already-sent messages to avoid orphaned uploads in the channel
+      for (const msg of sentMessages) {
+        try { await msg.delete(); } catch { /* ignore */ }
+      }
+      throw err;
     }
   }
 
