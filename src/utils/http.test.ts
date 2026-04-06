@@ -31,27 +31,26 @@ describe("fetchWithHeaders", () => {
   });
 
   it("sets User-Agent when given a URL string", async () => {
-    let lastInit: RequestInit | undefined;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      lastInit = init;
+    let lastRequest: Request | undefined;
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      lastRequest = input instanceof Request ? input : new Request(input);
       return Promise.resolve(new Response("ok"));
     }) as typeof fetch;
     await fetchWithHeaders("https://example.com/path");
-    expect(new Headers(lastInit?.headers).get("User-Agent")).toContain("sushii-sns");
+    expect(lastRequest?.headers.get("User-Agent")).toContain("sushii-sns");
   });
 
   it("preserves existing init headers and adds User-Agent", async () => {
-    let lastInit: RequestInit | undefined;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      lastInit = init;
+    let lastRequest: Request | undefined;
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      lastRequest = input instanceof Request ? input : new Request(input);
       return Promise.resolve(new Response("ok"));
     }) as typeof fetch;
     await fetchWithHeaders("https://example.com/", {
       headers: { "X-Test": "1" },
     });
-    const h = new Headers(lastInit?.headers);
-    expect(h.get("User-Agent")).toContain("sushii-sns");
-    expect(h.get("X-Test")).toBe("1");
+    expect(lastRequest?.headers.get("User-Agent")).toContain("sushii-sns");
+    expect(lastRequest?.headers.get("X-Test")).toBe("1");
   });
 
   it("merges User-Agent into an existing Request", async () => {
