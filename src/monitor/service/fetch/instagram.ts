@@ -12,12 +12,20 @@ import { fetchInstagramStories } from "./instagram-story";
 
 const log = logger.child({ module: "monitor/fetch/instagram" });
 
+async function extractErrorBody(res: Response): Promise<string | object> {
+  try {
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return text; }
+  } catch { return "<unreadable>"; }
+}
+
 /**
  * Normalized post node from RapidAPI /posts or Looter feed.
  */
 interface NormalizedFeedNode {
   shortcode: string;
-  isCarousel: boolean;
+  /** True when the carousel media URLs are not available inline and must be fetched via API. */
+  needsCarouselApiFetch: boolean;
   meta: {
     title: string;
     sourceUrl: string;
@@ -58,7 +66,7 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
       if (!url) return [];
       return [{
         shortcode,
-        isCarousel: false,
+        needsCarouselApiFetch: false,
         meta: item.meta,
         singleMediaUrl: url,
         isVideo: item.urls?.[0]?.extension === "mp4",
@@ -109,13 +117,13 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
 
         if (carouselUrls.length > 0) {
           log.debug({ shortcode, slideCount: carouselUrls.length }, "Extracted carousel slides from feed inline");
-          nodes.push({ shortcode, isCarousel: false, meta, carouselUrls });
+          nodes.push({ shortcode, needsCarouselApiFetch: false, meta, carouselUrls });
           continue;
         }
       }
 
       log.debug({ shortcode }, "Carousel has no inline media — will fetch via mediaByShortcode");
-      nodes.push({ shortcode, isCarousel: true, meta });
+      nodes.push({ shortcode, needsCarouselApiFetch: true, meta });
       continue;
     }
 
@@ -127,7 +135,7 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
 
     nodes.push({
       shortcode,
-      isCarousel: false,
+      needsCarouselApiFetch: false,
       meta,
       singleMediaUrl: mediaUrl,
       isVideo: node.is_video === true || node.media_type === 2,
@@ -182,7 +190,7 @@ export function parseRapidApiPostsResponseLooter(json: any): NormalizedFeedNode[
           .filter((u: unknown): u is string => typeof u === "string" && u.length > 0);
 
         if (carouselUrls.length > 0) {
-          nodes.push({ shortcode, isCarousel: false, meta, carouselUrls });
+          nodes.push({ shortcode, needsCarouselApiFetch: false, meta, carouselUrls });
           continue;
         }
       }
@@ -199,7 +207,7 @@ export function parseRapidApiPostsResponseLooter(json: any): NormalizedFeedNode[
 
     nodes.push({
       shortcode,
-      isCarousel: false,
+      needsCarouselApiFetch: false,
       meta,
       singleMediaUrl: mediaUrl,
       isVideo: node.is_video === true,
@@ -236,17 +244,7 @@ async function listIgProfilePostsViaRapidApi120(
   const res = await fetch(req);
   recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_POSTS);
   if (!res.ok) {
-    let errorBody: string | object = "Unknown error";
-    try {
-      const clonedRes = res.clone();
-      errorBody = await clonedRes.text();
-      try {
-        errorBody = JSON.parse(errorBody as string);
-      } catch {
-      }
-    } catch {
-    }
-
+    const errorBody = await extractErrorBody(res);
     log.error(
       {
         status: res.status,
@@ -256,7 +254,6 @@ async function listIgProfilePostsViaRapidApi120(
       },
       "RapidAPI120 /posts failed",
     );
-
     throw new Error(
       `RapidAPI120 /posts failed: ${res.status} ${res.statusText} - ${typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)}`,
     );
@@ -293,17 +290,7 @@ async function listIgProfilePostsViaRapidApiLooter(
   const res = await fetch(req);
   recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_USER_FEEDS2);
   if (!res.ok) {
-    let errorBody: string | object = "Unknown error";
-    try {
-      const clonedRes = res.clone();
-      errorBody = await clonedRes.text();
-      try {
-        errorBody = JSON.parse(errorBody as string);
-      } catch {
-      }
-    } catch {
-    }
-
+    const errorBody = await extractErrorBody(res);
     log.error(
       {
         status: res.status,
@@ -313,7 +300,6 @@ async function listIgProfilePostsViaRapidApiLooter(
       },
       "RapidAPI-Looter /user-feeds2 failed",
     );
-
     throw new Error(
       `RapidAPI-Looter /user-feeds2 failed: ${res.status} ${res.statusText} - ${typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)}`,
     );
@@ -342,7 +328,7 @@ async function hydrateIgFeedNode(
   } else if (node.singleMediaUrl) {
     mediaUrls = [node.singleMediaUrl];
   } else {
-    if (node.isCarousel) {
+    if (node.needsCarouselApiFetch) {
       log.error({ shortcode, node }, "Carousel flagged but no URLs - unexpected RapidAPI response");
     }
     return null;
@@ -373,6 +359,7 @@ async function orchestrateIgProfileNodes(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     limit?: number;
+    markSeenOnly?: boolean;
   },
 ): Promise<PostData<InstagramMetadata>[]> {
   const limit = options?.limit ?? Infinity;
@@ -380,19 +367,38 @@ async function orchestrateIgProfileNodes(
   const markSeen = options?.markPostSeen;
 
   const unseenNodes = nodes.filter((n) => !seenChecker?.(n.shortcode));
+  const nodesToProcess = limit > 0 && isFinite(limit) ? unseenNodes.slice(0, limit) : unseenNodes;
 
-  if (markSeen) {
-    for (const node of unseenNodes) {
-      markSeen(node.shortcode);
+  // Mark-seen-only mode: record all unseen IDs without downloading media.
+  if (options?.markSeenOnly) {
+    for (const node of nodesToProcess) {
+      markSeen?.(node.shortcode);
+    }
+    return [];
+  }
+
+  const postDatas: PostData<InstagramMetadata>[] = [];
+  const shortcodesToMarkSeen: string[] = [];
+
+  for (const node of nodesToProcess) {
+    const p = await hydrateIgFeedNode(node, igUsername, downloadFilesFromUrls);
+    if (p) {
+      postDatas.push(p);
+      shortcodesToMarkSeen.push(node.shortcode);
+    } else {
+      log.warn(
+        { shortcode: node.shortcode },
+        "IG profile post hydration returned null; marking seen to avoid infinite retry",
+      );
+      shortcodesToMarkSeen.push(node.shortcode); // still mark seen
     }
   }
 
-  const nodesToDownload = unseenNodes.slice(0, limit);
-  const postDatas: PostData<InstagramMetadata>[] = [];
-
-  for (const node of nodesToDownload) {
-    const p = await hydrateIgFeedNode(node, igUsername, downloadFilesFromUrls);
-    if (p) postDatas.push(p);
+  // Only mark posts seen after ALL hydration succeeds, so that if this
+  // provider throws mid-way and tryWithFallbacks retries with another
+  // provider, the fallback can still see those posts as unseen.
+  for (const shortcode of shortcodesToMarkSeen) {
+    markSeen?.(shortcode);
   }
 
   return postDatas;
@@ -409,6 +415,7 @@ async function fetchIgProfilePosts(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     limit?: number;
+    markSeenOnly?: boolean;
   },
 ): Promise<PostData<InstagramMetadata>[]> {
   return tryWithFallbacks([
@@ -437,13 +444,29 @@ export async function fetchInstagramConnectionPosts(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     limit?: number;
+    storiesLimit?: number;
     storiesMarkSeenOnly?: boolean;
+    profileMarkSeenOnly?: boolean;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
-  const [profilePosts, storyPosts] = await Promise.all([
-    fetchIgProfilePosts(igUsername, igId, downloadFilesFromUrls, options),
+  const profileOptions = options
+    ? { ...options, markSeenOnly: options.profileMarkSeenOnly }
+    : undefined;
+
+  const [profileResult, storiesResult] = await Promise.allSettled([
+    fetchIgProfilePosts(igUsername, igId, downloadFilesFromUrls, profileOptions),
     fetchInstagramStories(igUsername, downloadFilesFromUrls, options),
   ]);
 
-  return [...profilePosts, ...storyPosts] as PostData<AnySnsMetadata>[];
+  const profilePosts = profileResult.status === "fulfilled" ? profileResult.value : [];
+  const stories = storiesResult.status === "fulfilled" ? storiesResult.value : [];
+
+  if (profileResult.status === "rejected") {
+    log.error({ err: profileResult.reason }, "Failed to fetch Instagram profile posts");
+  }
+  if (storiesResult.status === "rejected") {
+    log.error({ err: storiesResult.reason }, "Failed to fetch Instagram stories");
+  }
+
+  return [...profilePosts, ...stories] as PostData<AnySnsMetadata>[];
 }

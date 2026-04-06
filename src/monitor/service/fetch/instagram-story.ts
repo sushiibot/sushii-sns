@@ -4,9 +4,11 @@
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
-import { tryWithFallbacks } from "../../../utils/fallback";
+import logger from "../../../logger";
 import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
+
+const log = logger.child({ module: "monitor/fetch/instagram-story" });
 
 /**
  * Flatten RapidAPI stories JSON into raw story items.
@@ -52,6 +54,12 @@ async function listInstagramStoryItems(igUsername: string): Promise<any[]> {
 }
 
 function getStoryPostId(igUsername: string, item: any, index: number): string {
+  if (!item?.id && !item?.pk) {
+    log.warn(
+      { igUsername, index },
+      "instagram-story: using non-deterministic index-based fallback story ID — deduplication may be unreliable if API response order changes",
+    );
+  }
   const storyId = String(item?.id ?? item?.pk ?? `story-${igUsername}-${index}`);
   return `ig-story:${igUsername}:${storyId}`;
 }
@@ -107,10 +115,12 @@ async function fetchInstagramStoriesViaRapidApi(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     storiesMarkSeenOnly?: boolean;
+    storiesLimit?: number;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
   const items = await listInstagramStoryItems(igUsername);
-  const { isPostSeen: isSeen, markPostSeen: markSeen, storiesMarkSeenOnly } = options ?? {};
+  const { isPostSeen: isSeen, markPostSeen: markSeen, storiesMarkSeenOnly, storiesLimit } = options ?? {};
+  const limit = storiesLimit ?? Infinity;
 
   if (storiesMarkSeenOnly) {
     for (let i = 0; i < items.length; i++) {
@@ -124,6 +134,8 @@ async function fetchInstagramStoriesViaRapidApi(
 
   const out: PostData<AnySnsMetadata>[] = [];
   for (let i = 0; i < items.length; i++) {
+    if (out.length >= limit) break;
+
     const item = items[i];
     const postID = getStoryPostId(igUsername, item, i);
 
@@ -131,10 +143,15 @@ async function fetchInstagramStoriesViaRapidApi(
       continue;
     }
 
-    markSeen?.(postID);
-
     const p = await hydrateInstagramStoryItem(igUsername, item, i, downloadFilesFromUrls);
-    if (p) out.push(p);
+    // Mark seen regardless of hydration success so a story with no extractable
+    // media URL doesn't get re-fetched on every poll until it expires.
+    markSeen?.(postID);
+    if (p) {
+      out.push(p);
+    } else {
+      log.warn({ postID, igUsername }, "Story hydration returned null; marking seen to avoid infinite retry");
+    }
   }
 
   return out;
@@ -147,12 +164,8 @@ export async function fetchInstagramStories(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     storiesMarkSeenOnly?: boolean;
+    storiesLimit?: number;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
-  return tryWithFallbacks([
-    {
-      name: "RapidAPI stories",
-      fn: () => fetchInstagramStoriesViaRapidApi(igUsername, downloadFilesFromUrls, options),
-    },
-  ]);
+  return fetchInstagramStoriesViaRapidApi(igUsername, downloadFilesFromUrls, options);
 }

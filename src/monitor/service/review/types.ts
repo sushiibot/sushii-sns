@@ -3,8 +3,6 @@ import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 // ---------------------------------------------------------------------------
 // Custom ID prefixes (shared between view/ and handlers/)
 // ---------------------------------------------------------------------------
-export const MONITOR_FETCH_PREFIX = "monitor:fetch:";
-export const MONITOR_STATUS_PREFIX = "monitor:status:";
 export const MONITOR_POLL_PREFIX = "monitor:poll:";
 export const REVIEW_REMOVE_PREFIX = "monitor:review:remove:";
 export const REVIEW_EDIT_PREFIX = "monitor:review:edit:";
@@ -19,7 +17,7 @@ export interface ReviewState {
   customContent: string | null;
   renderedContent: string;
   socialsChannelId: string;
-  format: string;
+  format: "links" | "inline";
   template: string;
   fetcherUserId: string;
   fileNames: string[];

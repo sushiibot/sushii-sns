@@ -5,7 +5,7 @@ import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { isDevMode, loadMockJson } from "../../runtime";
-import { selectUnseenMarkAllSlice, type DownloadFilesFromUrls } from "../fetch";
+import { selectUnseenSlice, type DownloadFilesFromUrls } from "../fetch";
 
 function processTwitterText(item: any): string {
   let text = String(item?.text ?? "");
@@ -104,7 +104,11 @@ async function hydrateTwitterTimelineItem(
     username,
     postID: postId,
     originalText: processTwitterText(item),
-    timestamp: item?.created_at ? new Date(item.created_at) : undefined,
+    timestamp: item?.created_at
+      ? typeof item.created_at === "number"
+        ? new Date(item.created_at * 1000)
+        : new Date(item.created_at)
+      : undefined,
     files,
   };
 }
@@ -116,22 +120,36 @@ export async function fetchTwitterFeedRapidApi(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     limit?: number;
+    markSeenOnly?: boolean;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
   const json = await fetchTwitterTimelineJson(handle);
   const items = Array.isArray(json?.timeline) ? json.timeline : [];
   const limit = options?.limit ?? Infinity;
-  const toProcess = selectUnseenMarkAllSlice(
+  const getId = (item: any) => String(item?.tweet_id ?? "");
+  const toProcess = selectUnseenSlice(
     items,
-    (item: any) => String(item?.tweet_id ?? ""),
+    getId,
     options?.isPostSeen,
-    options?.markPostSeen,
     limit,
   );
+
+  if (options?.markSeenOnly) {
+    for (const item of toProcess) {
+      const id = getId(item);
+      if (id) options?.markPostSeen?.(id);
+    }
+    return [];
+  }
+
   const out: PostData<AnySnsMetadata>[] = [];
   for (const item of toProcess) {
     const p = await hydrateTwitterTimelineItem(item, downloadFilesFromUrls);
-    if (p) out.push(p);
+    if (p) {
+      const id = getId(item);
+      if (id) options?.markPostSeen?.(id);
+      out.push(p);
+    }
   }
   return out;
 }

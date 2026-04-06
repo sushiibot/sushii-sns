@@ -7,7 +7,7 @@ import logger from "../../../logger";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { tryWithFallbacks } from "../../../utils/fallback";
 import { isDevMode, loadMockJson } from "../../runtime";
-import { selectUnseenMarkAllSlice, type DownloadFilesFromUrls } from "../fetch";
+import { selectUnseenSlice, type DownloadFilesFromUrls } from "../fetch";
 
 const log = logger.child({ module: "monitor/fetch/tiktok" });
 
@@ -72,21 +72,34 @@ async function processTiktokFeedItems<T>(
         isPostSeen?: (id: string) => boolean;
         markPostSeen?: (id: string) => void;
         limit?: number;
+        markSeenOnly?: boolean;
       }
     | undefined,
   limit: number,
 ): Promise<PostData<AnySnsMetadata>[]> {
-  const toProcess = selectUnseenMarkAllSlice(
+  const toProcess = selectUnseenSlice(
     items,
     getId,
     options?.isPostSeen,
-    options?.markPostSeen,
     limit,
   );
+
+  if (options?.markSeenOnly) {
+    for (const item of toProcess) {
+      const id = getId(item);
+      if (id) options?.markPostSeen?.(id);
+    }
+    return [];
+  }
+
   const out: PostData<AnySnsMetadata>[] = [];
   for (const item of toProcess) {
     const p = await hydrateItem(item);
-    if (p) out.push(p);
+    if (p) {
+      const id = getId(item);
+      if (id) options?.markPostSeen?.(id);
+      out.push(p);
+    }
   }
   return out;
 }
@@ -99,6 +112,7 @@ async function fetchTiktokFeedViaBestExperience(
         isPostSeen?: (id: string) => boolean;
         markPostSeen?: (id: string) => void;
         limit?: number;
+        markSeenOnly?: boolean;
       }
     | undefined,
   limit: number,
@@ -135,6 +149,7 @@ async function fetchTiktokFeedViaApi6(
         isPostSeen?: (id: string) => boolean;
         markPostSeen?: (id: string) => void;
         limit?: number;
+        markSeenOnly?: boolean;
       }
     | undefined,
   limit: number,
@@ -155,8 +170,8 @@ async function hydrateTiktokAwemeBestExperience(
   aweme: any,
   downloadFilesFromUrls: DownloadFilesFromUrls,
 ): Promise<PostData<AnySnsMetadata> | null> {
-  const awemeId = String(aweme?.aweme_id ?? "");
-  if (!awemeId) return null;
+  if (!aweme?.aweme_id) return null;
+  const awemeId = String(aweme.aweme_id);
 
   const videoUrls: string[] = Array.isArray(aweme?.video?.play_addr?.url_list)
     ? aweme.video.play_addr.url_list.filter(
@@ -206,8 +221,8 @@ async function hydrateTiktokVideoApi6(
   video: any,
   downloadFilesFromUrls: DownloadFilesFromUrls,
 ): Promise<PostData<AnySnsMetadata> | null> {
-  const videoId = String(video?.video_id ?? "");
-  if (!videoId) return null;
+  if (!video?.video_id) return null;
+  const videoId = String(video.video_id);
 
   const mediaUrl = video?.unwatermarked_download_url ?? video?.download_url;
 
@@ -253,6 +268,7 @@ export async function fetchTiktokFeed(
     isPostSeen?: (id: string) => boolean;
     markPostSeen?: (id: string) => void;
     limit?: number;
+    markSeenOnly?: boolean;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
   const limit = options?.limit ?? Infinity;
