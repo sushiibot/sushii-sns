@@ -15,6 +15,7 @@ import { TikTokDownloader } from "../platforms/tiktok/downloader";
 import { TwitterDownloader } from "../platforms/twitter/downloader";
 import { tracer } from "../tracing";
 import { formatSnsErrorForUser } from "./snsErrors";
+import { getGuildTemplate, type ServerConfig } from "../config/server_config";
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -87,7 +88,7 @@ export async function* snsService(
   }
 }
 
-export async function snsHandler(msg: Message<true>): Promise<void> {
+export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig | null): Promise<void> {
   if (!msg.channel.isSendable()) {
     return;
   }
@@ -194,7 +195,8 @@ export async function snsHandler(msg: Message<true>): Promise<void> {
             }
 
             const links = attachments.map((attachment) => attachment.url);
-            const msgs = platform.buildDiscordMessages(postData, links);
+            const template = getGuildTemplate(serverConfig, msg.guildId);
+            const msgs = platform.buildDiscordMessages(postData, links, template);
 
             for (const postMsg of msgs) {
               await msg.reply({

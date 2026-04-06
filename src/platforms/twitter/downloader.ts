@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
+import { buildLinksFormatMessages } from "../../utils/template";
 import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import { fetchWithHeaders, getFileExtFromURL } from "../../utils/http";
 import type { TweetAPIResponse } from "./types";
@@ -137,7 +138,12 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
   buildDiscordMessages(
     postData: PostData<TwitterMetadata>,
     attachmentURLs: string[],
+    template?: string,
   ): MessageCreateOptions[] {
+    if (template) {
+      return buildLinksFormatMessages(template, postData, attachmentURLs);
+    }
+
     let msgs: MessageCreateOptions[] = [];
 
     // Formatted post
@@ -148,12 +154,6 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
       postData.timestamp,
     );
     mainPostContent += "\n";
-
-    // ✅ Add the tweet text/caption (this was missing!)
-    if (postData.originalText) {
-      mainPostContent += `${postData.originalText}\n\n`;
-    }
-
     mainPostContent += `<https://x.com/${postData.username}/status/${postData.postID}>`;
     mainPostContent += "\n";
 

@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, async (message) => {
-    await MessageCreateHandler(message);
+    await MessageCreateHandler(message, serverConfig);
   });
 
   const monitorsConfigPath = config.MONITORS_CONFIG_PATH;

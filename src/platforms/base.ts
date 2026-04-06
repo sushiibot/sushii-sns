@@ -152,6 +152,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
   abstract buildDiscordMessages(
     postData: PostData<M>,
     attachmentURLs: string[],
+    template?: string,
   ): MessageCreateOptions[];
 
   /**
