@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, KST_TIMEZONE, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
-import { getFileExtFromURL } from "../../utils/http";
+import { getFileExtFromURL, tracedFetch } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
 import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import { tryWithFallbacks } from "../../utils/fallback";
@@ -92,7 +92,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
-    const response = await fetch(req);
+    const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORY_SINGLE);
 
     if (response.status !== 200) {
@@ -235,7 +235,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
       },
     );
 
-    const response = await fetch(req);
+    const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED);
 
     if (!response.ok) {

@@ -8,7 +8,7 @@ import {
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { tryWithFallbacks } from "../../utils/fallback";
-import { getFileExtFromURL } from "../../utils/http";
+import { getFileExtFromURL, tracedFetch } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
 import { buildLinksFormatMessages } from "../../utils/template";
 import {
@@ -80,7 +80,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
     let resParsed: BdMonitorResponse;
     while (true) {
-      const res = await fetch(req);
+      const res = await tracedFetch(req);
       recordApiUsage(ApiUsageEndpoint.BRIGHTDATA_PROGRESS);
 
       // Might be too fast, retry at least 5 times
@@ -156,7 +156,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         },
       );
 
-      const response = await fetch(req);
+      const response = await tracedFetch(req);
       recordApiUsage(ApiUsageEndpoint.BRIGHTDATA_SNAPSHOT);
 
       // Might be too fast, "Snapshot is building, try again in 30s"
@@ -244,7 +244,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
     progressCallback?.("Fetching post...");
 
-    const response = await fetch(req);
+    const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_MEDIA_BY_SHORTCODE);
     if (!response.ok) {
       throw new Error("Failed to fetch Instagram post.");
@@ -305,7 +305,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
-    const response = await fetch(req);
+    const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.BRIGHTDATA_TRIGGER);
 
     if (response.status !== 200) {

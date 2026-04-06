@@ -1,5 +1,6 @@
 import { type MessageCreateOptions } from "discord.js";
 import logger from "../logger";
+import { tracedFetch } from "../utils/http";
 
 const log = logger.child({ module: "SnsDownloader" });
 
@@ -160,7 +161,7 @@ export abstract class SnsDownloader<M extends SnsMetadata> {
    */
   protected async downloadImages(urls: string[]): Promise<Buffer[]> {
     const ps = urls.map(async (url) => {
-      const res = await fetch(url);
+      const res = await tracedFetch(new Request(url));
       if (!res.ok) {
         throw new Error(`Failed to download image (${res.status}): ${url}`);
       }

@@ -8,6 +8,7 @@ import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { buildLinksFormatMessages } from "../../utils/template";
+import { tracedFetch } from "../../utils/http";
 import {
   SnsDownloader,
   type Platform,
@@ -64,7 +65,7 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
     progressCallback?: ProgressFn,
   ): Promise<PostData<TikTokMetadata>[]> {
     const req = this.buildApiRequest(snsLink);
-    const response = await fetch(req);
+    const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_TIKTOK_BEST_VIDEO);
 
     if (response.status !== 200) {
