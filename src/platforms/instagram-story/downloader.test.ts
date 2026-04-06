@@ -42,9 +42,20 @@ describe("InstagramStoryDownloader.findUrls", () => {
     expect(links[1].metadata.username).toBe("b");
   });
 
-  it("does not match bare profile URLs", () => {
-    const links = dl.findUrls("dl https://www.instagram.com/someuser/");
-    expect(links).toHaveLength(0);
+  it("matches a bare profile URL", () => {
+    const links = dl.findUrls("dl https://www.instagram.com/roses_are_rosie/");
+    expect(links).toHaveLength(1);
+    expect(links[0].metadata).toEqual({
+      platform: "instagram-story",
+      username: "roses_are_rosie",
+    });
+  });
+
+  it("matches a profile URL without www", () => {
+    const links = dl.findUrls("dl https://instagram.com/someuser/");
+    expect(links).toHaveLength(1);
+    expect(links[0].metadata.username).toBe("someuser");
+    expect(links[0].metadata.shortcode).toBeUndefined();
   });
 
   it("does not match post URLs", () => {

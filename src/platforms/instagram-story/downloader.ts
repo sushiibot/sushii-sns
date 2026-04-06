@@ -32,28 +32,39 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     "https?://" +
     "(?:www\\.)?" +
     "instagram\\.com/" +
-    "stories/" +
-    "([\\w.-]+)" +
-    "/" +
-    "(\\d+)" +
-    "/?" +
-    "(?:\\?\\S*)?" +
-    "(?:#\\S*)?",
+    "(?:" +
+      // Specific story URL: /stories/USER/ID/
+      "stories/([\\w.-]+)/(\\d+)/?" +
+      "|" +
+      // Profile URL: /USERNAME/ (excludes known path segments)
+      "((?!(?:p|reel|reels|tv|stories)/)\\w[\\w.-]{2,})/" +
+    ")" +
+    "(?:\\?[^\\s]*)?" +
+    "(?:#[^\\s]*)?",
     "gi"
   );
 
   protected createLinkFromMatch(
     match: RegExpMatchArray,
   ): SnsLink<InstagramMetadata> {
-    const username = match[1];
-    const storyId = match[2];
+    if (match[1] && match[2]) {
+      // Specific story URL: /stories/USER/ID/
+      return {
+        url: match[0],
+        metadata: {
+          platform: "instagram-story",
+          username: match[1],
+          shortcode: match[2],
+        },
+      };
+    }
 
+    // Profile URL: /USERNAME/
     return {
       url: match[0],
       metadata: {
         platform: "instagram-story",
-        username,
-        shortcode: storyId, // just use but ist actually the story id
+        username: match[3],
       },
     };
   }
@@ -205,6 +216,121 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     return postDatas;
   }
 
+  private async fetchContentViaStoriesFeedApi(
+    snsLink: SnsLink<InstagramMetadata>,
+    progressCallback?: ProgressFn,
+  ): Promise<PostData<InstagramMetadata>[]> {
+    const username = snsLink.metadata.username!;
+
+    const req = new Request(
+      "https://instagram120.p.rapidapi.com/api/instagram/stories",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-rapidapi-host": "instagram120.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+        },
+        body: JSON.stringify({ username }),
+      },
+    );
+
+    const response = await fetch(req);
+    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED);
+
+    if (!response.ok) {
+      const body = await response.text();
+      log.error(
+        { responseCode: response.status, responseBody: body },
+        "Failed to fetch ig stories feed",
+      );
+      throw new StoryUnavailableError(
+        "Could not fetch stories for that profile. The account may be private or have no active stories.",
+      );
+    }
+
+    const json: any = await response.json();
+
+    // Flatten nested result structure (same logic as monitor fetch)
+    const resultItems: any[] = Array.isArray(json?.result) ? json.result : [];
+    const nestedItems: any[] = resultItems.flatMap((entry: any) => {
+      if (Array.isArray(entry?.items)) return entry.items;
+      if (Array.isArray(entry?.stories)) return entry.stories;
+      if (Array.isArray(entry?.result)) return entry.result;
+      return [];
+    });
+    const items: any[] = nestedItems.length > 0 ? nestedItems : resultItems;
+
+    if (items.length === 0) {
+      throw new StoryUnavailableError(
+        "No active stories found for that profile.",
+      );
+    }
+
+    progressCallback?.(`Downloading ${items.length} stories`);
+
+    const storiesByDate = new Map<string, { date?: Date; urls: string[] }>();
+
+    for (const item of items) {
+      const takenAtMs = (item.taken_at ?? 0) * 1000;
+      const d = dayjs(takenAtMs).tz(KST_TIMEZONE);
+      const dateKey = takenAtMs ? d.format("YYMMDD") : "unknown";
+
+      const storiesDay = storiesByDate.get(dateKey) ?? {
+        date: takenAtMs ? new Date(takenAtMs) : undefined,
+        urls: [],
+      };
+
+      let mediaUrl: string | undefined;
+
+      const videoVersions: any[] = Array.isArray(item?.video_versions) ? item.video_versions : [];
+      if (videoVersions[0]?.url) {
+        mediaUrl = videoVersions[0].url;
+      } else if (item?.video_url) {
+        mediaUrl = item.video_url;
+      } else {
+        const candidates: any[] = Array.isArray(item?.image_versions2?.candidates)
+          ? item.image_versions2.candidates
+          : Array.isArray(item?.candidates)
+            ? item.candidates
+            : [];
+        mediaUrl = candidates[0]?.url ?? item?.thumbnail_url;
+      }
+
+      if (mediaUrl) {
+        storiesDay.urls.push(mediaUrl);
+      } else {
+        log.warn({ item }, "No extractable media URL for story feed item");
+      }
+
+      storiesByDate.set(dateKey, storiesDay);
+    }
+
+    const postDatas: PostData<InstagramMetadata>[] = [];
+    for (const [dateKey, { date, urls }] of storiesByDate.entries()) {
+      const buffers = await this.downloadImages(urls);
+
+      let files: File[] = buffers.map((buf, i) => ({
+        ext: getFileExtFromURL(urls[i]),
+        buffer: buf,
+      }));
+
+      files = await convertHeicToJpeg(files);
+
+      postDatas.push({
+        postLink: snsLink,
+        username,
+        postID: `instagram-story:${username}:${dateKey}`,
+        originalText: "",
+        timestamp: date,
+        files,
+      });
+    }
+
+    progressCallback?.("Downloaded!", true);
+    return postDatas;
+  }
+
   // ---------------------------------------------------------------------------
   // Public fetchContent — tries providers with fallbacks
   // ---------------------------------------------------------------------------
@@ -213,6 +339,16 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     snsLink: SnsLink<InstagramMetadata>,
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
+    if (!snsLink.metadata.shortcode) {
+      // Profile URL — fetch all current stories for this user
+      return tryWithFallbacks([
+        {
+          name: "RapidAPI stories feed",
+          fn: () => this.fetchContentViaStoriesFeedApi(snsLink, progressCallback),
+        },
+      ]);
+    }
+
     return tryWithFallbacks([
       {
         name: "RapidAPI stories",
