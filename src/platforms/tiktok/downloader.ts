@@ -77,7 +77,7 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
         "Failed to fetch TikTok API response",
       );
 
-      throw new Error("Failed to fetch TikTok API response");
+      throw new Error("Failed to fetch TikTok video.");
     }
 
     let rawJson;
@@ -105,7 +105,7 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
         "Failed to parse tiktok API response",
       );
 
-      throw new Error("Failed to parse tiktok JSON response");
+      throw new Error("Failed to process TikTok video");
     }
 
     log.debug(

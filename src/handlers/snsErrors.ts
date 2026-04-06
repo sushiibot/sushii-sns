@@ -32,5 +32,5 @@ export function formatSnsErrorForUser(err: unknown): string {
     return err.message;
   }
 
-  return String(err);
+  return "Download failed, please try again";
 }

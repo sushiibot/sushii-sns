@@ -78,11 +78,19 @@ export class TwitterDownloader extends SnsDownloader<TwitterMetadata> {
     }
 
     if (tweetRes.code !== 200) {
-      throw new Error("Failed to fetch tweet: " + tweetRes.message);
+      const msg = (() => {
+        switch (tweetRes.code) {
+          case 404: return "Tweet not found — it may have been deleted.";
+          case 401: return "This tweet is from a protected account.";
+          case 403: return "This tweet is not available (it may be age-restricted or removed).";
+          default:  return "Failed to fetch tweet.";
+        }
+      })();
+      throw new Error(msg);
     }
 
     if (!tweetRes.tweet) {
-      throw new Error("Tweet not found: " + tweetRes.message);
+      throw new Error("Tweet not found.");
     }
 
     const media = tweetRes.tweet.media?.all ?? [];

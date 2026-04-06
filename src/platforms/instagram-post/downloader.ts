@@ -95,7 +95,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
             "Failed to fetch ig API snapshot response",
           );
 
-          throw new Error("Failed to fetch ig API response within 30 seconds");
+          throw new Error("Failed to fetch Instagram post (timed out)");
         }
 
         // Wait a bit
@@ -113,7 +113,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           "Failed to fetch ig API snapshot response",
         );
 
-        throw new Error(`Failed to fetch ig API response: ${res.status}`);
+        throw new Error(`Failed to fetch Instagram post (${res.status})`);
       }
 
       const resJson = await res.json();
@@ -127,7 +127,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
           "IG API failed to process the post",
         );
 
-        throw new Error("IG API failed to process the post");
+        throw new Error("Failed to fetch Instagram post");
       }
 
       // Done, break loop
@@ -137,7 +137,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
       // Still processing ("starting" / "running") — wait before retrying
       if (Date.now() > cancelAt) {
-        throw new Error("IG API timed out waiting for snapshot to be ready");
+        throw new Error("Failed to fetch Instagram post (timed out)");
       }
 
       await sleep(1000);
@@ -205,7 +205,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       }
     }
 
-    throw new Error("Failed to fetch ig API response after 5 tries");
+    throw new Error("Failed to fetch Instagram post");
   }
 
   async fetchSnapshotData(snapshotID: string): Promise<InstagramPostElement> {
@@ -242,21 +242,19 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       },
     );
 
-    progressCallback?.("Fetching IG data via RapidAPI...");
+    progressCallback?.("Fetching post...");
 
     const response = await fetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_MEDIA_BY_SHORTCODE);
     if (!response.ok) {
-      throw new Error(
-        `RapidAPI mediaByShortcode failed (${response.status})`,
-      );
+      throw new Error("Failed to fetch Instagram post.");
     }
 
     const rawJson = await response.json();
     const items = RapidApiMediaResponseSchema.parse(rawJson);
 
     if (items.length === 0) {
-      throw new Error("RapidAPI returned no media items");
+      throw new Error("No media found for this Instagram post");
     }
 
     // All items in the array share the same meta (carousel images)
@@ -268,7 +266,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       .filter((u) => u.length > 0);
 
     if (mediaUrls.length === 0) {
-      throw new Error("RapidAPI returned no media URLs");
+      throw new Error("No media found for this Instagram post");
     }
 
     progressCallback?.("Downloading images...");
@@ -320,7 +318,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         "Failed to fetch ig API response",
       );
 
-      throw new Error("Failed to fetch ig API response");
+      throw new Error("Failed to fetch Instagram post");
     }
 
     let triggerResponse: BdTriggerResponse;
@@ -337,7 +335,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         "Failed to parse ig trigger API response",
       );
 
-      throw new Error("Failed to parse ig JSON response");
+      throw new Error("Failed to process Instagram post");
     }
 
     if (!triggerResponse.snapshot_id) {

@@ -222,7 +222,7 @@ export class PanelHandler {
 
     if (cmd.channelId !== this.config.panel_channel_id) {
       await cmd.editReply({
-        content: "Run this command in the configured panel channel (panel_channel_id).",
+        content: "Run this command in the configured panel channel.",
       });
       return;
     }
