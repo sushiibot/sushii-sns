@@ -1,18 +1,22 @@
 import {
+  ActionRowBuilder,
   GuildMember,
   MessageFlags,
   PermissionFlagsBits,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type SendableChannels,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
 import { buildInlineFormatContent } from "../../utils/template";
-import type { MonitorsConfig, ConnectionType } from "../config";
-import { ConnectionTypeSchema, findConnectionById, getConnectionId } from "../config";
+import type { MonitorsConfig } from "../config";
+import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
 import { batchToMessageOptions, buildReviewBatches } from "../view/review";
@@ -25,6 +29,8 @@ const log = logger.child({ module: "monitor/handlers/panel" });
 
 const NOT_CONFIGURED_MSG =
   "Monitor is not configured for this server. Use `/monitor config setup` to get started.";
+
+export const DB_PURGE_CONNECTION_SELECT_ID = "monitor:db:purge-connection";
 
 function getDisplayName(interaction: ButtonInteraction): string {
   const member = interaction.member;
@@ -280,45 +286,69 @@ export class PanelHandler {
   }
 
   async handleDbPurgeConnection(cmd: ChatInputCommandInteraction): Promise<void> {
-    await cmd.deferReply({ flags: MessageFlags.Ephemeral });
-
     const guildId = cmd.guildId;
     if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
+      await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const config = this.repo.getConfig(guildId);
+    if (!config || config.connections.length === 0) {
+      await cmd.reply({ content: NOT_CONFIGURED_MSG, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(DB_PURGE_CONNECTION_SELECT_ID)
+      .setPlaceholder("Select a connection to purge")
+      .addOptions(
+        config.connections.map((c) => {
+          const id = getConnectionId(c);
+          return new StringSelectMenuOptionBuilder().setLabel(id).setValue(id);
+        }),
+      );
+
+    await cmd.reply({
+      content: "Select a connection to purge (resets cooldown and seen-post history):",
+      components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  async handleDbPurgeConnectionSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await cmd.editReply({ content: NOT_CONFIGURED_MSG });
+      await interaction.update({ content: NOT_CONFIGURED_MSG, components: [] });
       return;
     }
 
-    const rawType = cmd.options.getString("type", true);
-    const parseResult = ConnectionTypeSchema.safeParse(rawType);
-    if (!parseResult.success) {
-      await cmd.editReply({ content: `Invalid connection type: \`${rawType}\`.` });
+    const connectionId = interaction.values[0];
+    if (!connectionId) {
+      await interaction.reply({ content: "No connection selected.", flags: MessageFlags.Ephemeral });
       return;
     }
-    const type = parseResult.data as ConnectionType;
-    const handle = cmd.options.getString("handle", true);
-    const connectionId = getConnectionId({ type, handle });
 
     try {
       this.repo.purgeConnectionSeenPosts(guildId, connectionId);
       this.repo.purgeConnectionMeta(guildId, connectionId);
     } catch (err) {
       log.error({ err, connectionId }, "Failed to purge connection DB");
-      await cmd.editReply({ content: "Failed to purge connection DB." });
+      await interaction.update({ content: "Failed to purge connection DB.", components: [] });
       return;
     }
 
     await sendMonitorLog(
       this.client,
       config.log_channel_id,
-      `DB purged for connection: \`${connectionId}\` by ${cmd.user.username}`,
+      `DB purged for connection: \`${connectionId}\` by ${interaction.user.username}`,
     );
-    await cmd.editReply({ content: `Purged DB for \`${connectionId}\`.` });
+    await interaction.update({ content: `✅ Purged DB for \`${connectionId}\`.`, components: [] });
   }
 
   async handleDbPurgeAll(cmd: ChatInputCommandInteraction): Promise<void> {

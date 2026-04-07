@@ -3,10 +3,13 @@ import {
   ChannelType,
   MessageFlags,
   ModalBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   TextInputBuilder,
   TextInputStyle,
   type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import logger from "../../logger";
 import { ConnectionTypeSchema, getConnectionId } from "../config";
@@ -16,6 +19,7 @@ const log = logger.child({ module: "monitor/handlers/config" });
 
 export const CONFIG_TEMPLATE_MODAL_ID = "monitor:config:template";
 export const CONNECTION_ADD_MODAL_ID = "monitor:connection:add";
+export const CONNECTION_REMOVE_SELECT_ID = "monitor:connection:remove";
 
 export class ConfigHandler {
   constructor(private readonly repo: MonitorRepository) {}
@@ -259,33 +263,65 @@ export class ConfigHandler {
   }
 
   async handleConnectionRemove(cmd: ChatInputCommandInteraction): Promise<void> {
-    await cmd.deferReply({ flags: MessageFlags.Ephemeral });
-
     const guildId = cmd.guildId;
     if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
+      await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
       return;
     }
 
-    const rawType = cmd.options.getString("type", true);
-    const parseResult = ConnectionTypeSchema.safeParse(rawType);
-    if (!parseResult.success) {
-      await cmd.editReply({ content: `Invalid type: \`${rawType}\`.` });
+    const config = this.repo.getConfig(guildId);
+    if (!config || config.connections.length === 0) {
+      await cmd.reply({ content: "No connections configured.", flags: MessageFlags.Ephemeral });
       return;
     }
-    const type = parseResult.data;
-    const handle = cmd.options.getString("handle", true);
+
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(CONNECTION_REMOVE_SELECT_ID)
+      .setPlaceholder("Select a connection to remove")
+      .addOptions(
+        config.connections.map((c) => {
+          const id = getConnectionId(c);
+          return new StringSelectMenuOptionBuilder().setLabel(id).setValue(id);
+        }),
+      );
+
+    await cmd.reply({
+      content: "Select a connection to remove:",
+      components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  async handleConnectionRemoveSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const connectionId = interaction.values[0];
+    if (!connectionId) {
+      await interaction.reply({ content: "No connection selected.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    const colonIdx = connectionId.indexOf(":");
+    if (colonIdx === -1) {
+      await interaction.reply({ content: "Invalid connection ID.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const type = connectionId.slice(0, colonIdx);
+    const handle = connectionId.slice(colonIdx + 1);
 
     try {
       this.repo.removeMonitor(guildId, type, handle);
     } catch (err) {
-      log.error({ err, guildId, type, handle }, "Failed to remove monitor connection");
-      await cmd.editReply({ content: "Failed to remove connection." });
+      log.error({ err, guildId, connectionId }, "Failed to remove monitor connection");
+      await interaction.update({ content: "Failed to remove connection.", components: [] });
       return;
     }
 
-    const connectionId = getConnectionId({ type, handle });
-    await cmd.editReply({ content: `✅ Removed connection \`${connectionId}\` (and its post history).` });
+    await interaction.update({ content: `✅ Removed \`${connectionId}\` (and its post history).`, components: [] });
   }
 
   async handleConnectionList(cmd: ChatInputCommandInteraction): Promise<void> {

@@ -76,21 +76,7 @@ export async function registerSlashCommands(
         .addSubcommand((sub) =>
           sub
             .setName("remove")
-            .setDescription("Remove a monitored social media account")
-            .addStringOption((opt) =>
-              opt
-                .setName("type")
-                .setDescription("Platform")
-                .setRequired(true)
-                .addChoices(
-                  { name: "Instagram", value: "instagram" },
-                  { name: "TikTok", value: "tiktok" },
-                  { name: "Twitter", value: "twitter" },
-                ),
-            )
-            .addStringOption((opt) =>
-              opt.setName("handle").setDescription("Username/handle").setRequired(true),
-            ),
+            .setDescription("Remove a monitored social media account (opens a picker)"),
         )
         .addSubcommand((sub) =>
           sub.setName("list").setDescription("List monitored social media accounts"),
@@ -114,21 +100,7 @@ export async function registerSlashCommands(
         .addSubcommand((sub) =>
           sub
             .setName("purge-connection")
-            .setDescription("Purge cooldown + seen-post data for one connection")
-            .addStringOption((opt) =>
-              opt
-                .setName("type")
-                .setDescription("Connection type")
-                .setRequired(true)
-                .addChoices(
-                  { name: "Instagram", value: "instagram" },
-                  { name: "TikTok", value: "tiktok" },
-                  { name: "Twitter", value: "twitter" },
-                ),
-            )
-            .addStringOption((opt) =>
-              opt.setName("handle").setDescription("Handle/username").setRequired(true),
-            ),
+            .setDescription("Purge cooldown + seen-post data for one connection (opens a picker)"),
         )
         .addSubcommand((sub) =>
           sub.setName("purge-all").setDescription("Purge all cooldown + seen-post data"),

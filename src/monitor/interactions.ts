@@ -20,7 +20,8 @@ import type { PanelHandler } from "./handlers/panel";
 import type { ReviewHandler } from "./handlers/review";
 import type { PostHandler } from "./handlers/post";
 import type { ConfigHandler } from "./handlers/config";
-import { CONFIG_TEMPLATE_MODAL_ID, CONNECTION_ADD_MODAL_ID } from "./handlers/config";
+import { CONFIG_TEMPLATE_MODAL_ID, CONNECTION_ADD_MODAL_ID, CONNECTION_REMOVE_SELECT_ID } from "./handlers/config";
+import { DB_PURGE_CONNECTION_SELECT_ID } from "./handlers/panel";
 
 const log = logger.child({ module: "monitor/interactions" });
 
@@ -84,6 +85,10 @@ export class InteractionDispatcher {
     const { customId } = interaction;
     if (customId.startsWith(REVIEW_REMOVE_PREFIX)) {
       await this.reviewHandler.handleRemove(interaction, customId.slice(REVIEW_REMOVE_PREFIX.length));
+    } else if (customId === CONNECTION_REMOVE_SELECT_ID) {
+      await this.configHandler.handleConnectionRemoveSelect(interaction);
+    } else if (customId === DB_PURGE_CONNECTION_SELECT_ID) {
+      await this.panelHandler.handleDbPurgeConnectionSelect(interaction);
     }
   }
 
