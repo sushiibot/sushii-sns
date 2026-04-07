@@ -19,6 +19,8 @@ import {
 import type { PanelHandler } from "./handlers/panel";
 import type { ReviewHandler } from "./handlers/review";
 import type { PostHandler } from "./handlers/post";
+import type { ConfigHandler } from "./handlers/config";
+import { CONFIG_TEMPLATE_MODAL_ID, CONNECTION_ADD_MODAL_ID } from "./handlers/config";
 
 const log = logger.child({ module: "monitor/interactions" });
 
@@ -48,6 +50,7 @@ export class InteractionDispatcher {
     private readonly panelHandler: PanelHandler,
     private readonly reviewHandler: ReviewHandler,
     private readonly postHandler: PostHandler,
+    private readonly configHandler: ConfigHandler,
   ) {}
 
   async handleInteraction(interaction: Interaction): Promise<void> {
@@ -88,6 +91,10 @@ export class InteractionDispatcher {
     const { customId } = interaction;
     if (customId.startsWith(REVIEW_MODAL_PREFIX)) {
       await this.reviewHandler.handleModalSubmit(interaction, customId.slice(REVIEW_MODAL_PREFIX.length));
+    } else if (customId === CONFIG_TEMPLATE_MODAL_ID) {
+      await this.configHandler.handleConfigTemplateModalSubmit(interaction);
+    } else if (customId === CONNECTION_ADD_MODAL_ID) {
+      await this.configHandler.handleConnectionAddModalSubmit(interaction);
     }
   }
 
@@ -131,6 +138,12 @@ export class InteractionDispatcher {
 
     const group = cmd.options.getSubcommandGroup(false);
     switch (group) {
+      case "config":
+        await this.handleConfigGroup(cmd);
+        break;
+      case "connection":
+        await this.handleConnectionGroup(cmd);
+        break;
       case "panel":
         await this.handlePanelGroup(cmd);
         break;
@@ -140,6 +153,42 @@ export class InteractionDispatcher {
       default:
         log.warn({ group }, "Unrecognized monitor subcommand group");
         await cmd.reply({ content: "Unknown subcommand group.", flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  private async handleConfigGroup(cmd: ChatInputCommandInteraction): Promise<void> {
+    const sub = cmd.options.getSubcommand(true);
+    switch (sub) {
+      case "setup":
+        await this.configHandler.handleConfigSetup(cmd);
+        break;
+      case "template":
+        await this.configHandler.handleConfigTemplate(cmd);
+        break;
+      case "show":
+        await this.configHandler.handleConfigShow(cmd);
+        break;
+      default:
+        log.warn({ sub }, "Unrecognized monitor config subcommand");
+        await cmd.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  private async handleConnectionGroup(cmd: ChatInputCommandInteraction): Promise<void> {
+    const sub = cmd.options.getSubcommand(true);
+    switch (sub) {
+      case "add":
+        await this.configHandler.handleConnectionAdd(cmd);
+        break;
+      case "remove":
+        await this.configHandler.handleConnectionRemove(cmd);
+        break;
+      case "list":
+        await this.configHandler.handleConnectionList(cmd);
+        break;
+      default:
+        log.warn({ sub }, "Unrecognized monitor connection subcommand");
+        await cmd.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
     }
   }
 
