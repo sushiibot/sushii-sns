@@ -1,8 +1,11 @@
 import {
   MessageFlags,
   PermissionFlagsBits,
+  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Interaction,
+  type ModalSubmitInteraction,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import logger from "../logger";
 import {
@@ -25,112 +28,38 @@ function checkManageGuild(interaction: ChatInputCommandInteraction): boolean {
   return true;
 }
 
-export function createInteractionDispatcher(
-  panelHandler: PanelHandler,
-  reviewHandler: ReviewHandler,
-  postHandler: PostHandler,
-) {
-  return async function handleInteraction(interaction: Interaction): Promise<void> {
+async function requireGuildAndPermission(cmd: ChatInputCommandInteraction): Promise<boolean> {
+  if (!cmd.guildId) {
+    await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
+    return false;
+  }
+  if (!checkManageGuild(cmd)) {
+    await cmd.reply({
+      content: "You need Manage Guild permission to use this command.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return false;
+  }
+  return true;
+}
+
+export class InteractionDispatcher {
+  constructor(
+    private readonly panelHandler: PanelHandler,
+    private readonly reviewHandler: ReviewHandler,
+    private readonly postHandler: PostHandler,
+  ) {}
+
+  async handleInteraction(interaction: Interaction): Promise<void> {
     try {
       if (interaction.isStringSelectMenu()) {
-        const customId = interaction.customId;
-        if (customId.startsWith(REVIEW_REMOVE_PREFIX)) {
-          const reviewId = customId.slice(REVIEW_REMOVE_PREFIX.length);
-          await reviewHandler.handleRemove(interaction, reviewId);
-          return;
-        }
-      }
-
-      if (interaction.isModalSubmit()) {
-        const customId = interaction.customId;
-        if (customId.startsWith(REVIEW_MODAL_PREFIX)) {
-          const reviewId = customId.slice(REVIEW_MODAL_PREFIX.length);
-          await reviewHandler.handleModalSubmit(interaction, reviewId);
-          return;
-        }
-      }
-
-      if (interaction.isButton()) {
-        const customId = interaction.customId;
-
-        if (customId.startsWith(MONITOR_POLL_PREFIX)) {
-          const connectionId = customId.slice(MONITOR_POLL_PREFIX.length);
-          await panelHandler.handlePollButton(interaction, connectionId);
-          return;
-        }
-
-        if (customId.startsWith(REVIEW_EDIT_PREFIX)) {
-          const reviewId = customId.slice(REVIEW_EDIT_PREFIX.length);
-          await reviewHandler.handleEdit(interaction, reviewId);
-          return;
-        }
-
-        if (customId.startsWith(REVIEW_POST_PREFIX)) {
-          const reviewId = customId.slice(REVIEW_POST_PREFIX.length);
-          await reviewHandler.handlePost(interaction, reviewId);
-          return;
-        }
-
-        if (customId.startsWith(REVIEW_SKIP_PREFIX)) {
-          const reviewId = customId.slice(REVIEW_SKIP_PREFIX.length);
-          await reviewHandler.handleSkip(interaction, reviewId);
-          return;
-        }
-      }
-
-      if (interaction.isChatInputCommand()) {
-        const cmd = interaction;
-
-        if (cmd.commandName === "fetch-all") {
-          await panelHandler.handleFetchAll(cmd);
-          return;
-        }
-
-        if (cmd.commandName !== "monitor" && cmd.commandName !== "post") {
-          log.warn({ commandName: cmd.commandName }, "Unrecognized slash command — command may be registered but missing a dispatch entry");
-          return;
-        }
-
-        if (!cmd.guildId) {
-          await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
-          return;
-        }
-
-        if (!checkManageGuild(cmd)) {
-          await cmd.reply({
-            content: "You need Manage Guild permission to use this command.",
-            flags: MessageFlags.Ephemeral,
-          });
-          return;
-        }
-
-        if (cmd.commandName === "post") {
-          await postHandler.handlePostCommand(cmd);
-          return;
-        }
-
-        const group = cmd.options.getSubcommandGroup(false);
-        const sub = cmd.options.getSubcommand(true);
-
-        if (group === "panel" && sub === "setup") {
-          await panelHandler.handlePanelSetup(cmd);
-          return;
-        }
-
-        if (group === "panel" && sub === "refresh") {
-          await panelHandler.handlePanelRefresh(cmd);
-          return;
-        }
-
-        if (group === "db" && sub === "purge-connection") {
-          await panelHandler.handleDbPurgeConnection(cmd);
-          return;
-        }
-
-        if (group === "db" && sub === "purge-all") {
-          await panelHandler.handleDbPurgeAll(cmd);
-          return;
-        }
+        await this.handleSelectMenu(interaction);
+      } else if (interaction.isModalSubmit()) {
+        await this.handleModal(interaction);
+      } else if (interaction.isButton()) {
+        await this.handleButton(interaction);
+      } else if (interaction.isChatInputCommand()) {
+        await this.handleChatCommand(interaction);
       }
     } catch (err) {
       log.error(err, "Unhandled error in monitor interaction handler");
@@ -146,5 +75,101 @@ export function createInteractionDispatcher(
         // Ignore — interaction may have already expired
       }
     }
-  };
+  }
+
+  private async handleSelectMenu(interaction: StringSelectMenuInteraction): Promise<void> {
+    const { customId } = interaction;
+    if (customId.startsWith(REVIEW_REMOVE_PREFIX)) {
+      await this.reviewHandler.handleRemove(interaction, customId.slice(REVIEW_REMOVE_PREFIX.length));
+    }
+  }
+
+  private async handleModal(interaction: ModalSubmitInteraction): Promise<void> {
+    const { customId } = interaction;
+    if (customId.startsWith(REVIEW_MODAL_PREFIX)) {
+      await this.reviewHandler.handleModalSubmit(interaction, customId.slice(REVIEW_MODAL_PREFIX.length));
+    }
+  }
+
+  private async handleButton(interaction: ButtonInteraction): Promise<void> {
+    const { customId } = interaction;
+    if (customId.startsWith(MONITOR_POLL_PREFIX)) {
+      await this.panelHandler.handlePollButton(interaction, customId.slice(MONITOR_POLL_PREFIX.length));
+    } else if (customId.startsWith(REVIEW_EDIT_PREFIX)) {
+      await this.reviewHandler.handleEdit(interaction, customId.slice(REVIEW_EDIT_PREFIX.length));
+    } else if (customId.startsWith(REVIEW_POST_PREFIX)) {
+      await this.reviewHandler.handlePost(interaction, customId.slice(REVIEW_POST_PREFIX.length));
+    } else if (customId.startsWith(REVIEW_SKIP_PREFIX)) {
+      await this.reviewHandler.handleSkip(interaction, customId.slice(REVIEW_SKIP_PREFIX.length));
+    }
+  }
+
+  private async handleChatCommand(cmd: ChatInputCommandInteraction): Promise<void> {
+    switch (cmd.commandName) {
+      case "fetch-all":
+        await this.panelHandler.handleFetchAll(cmd);
+        break;
+      case "post":
+        await this.handlePostCommand(cmd);
+        break;
+      case "monitor":
+        await this.handleMonitorCommand(cmd);
+        break;
+      default:
+        log.warn({ commandName: cmd.commandName }, "Unrecognized command received by monitor handler");
+        await cmd.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  private async handlePostCommand(cmd: ChatInputCommandInteraction): Promise<void> {
+    if (!await requireGuildAndPermission(cmd)) return;
+    await this.postHandler.handlePostCommand(cmd);
+  }
+
+  private async handleMonitorCommand(cmd: ChatInputCommandInteraction): Promise<void> {
+    if (!await requireGuildAndPermission(cmd)) return;
+
+    const group = cmd.options.getSubcommandGroup(false);
+    switch (group) {
+      case "panel":
+        await this.handlePanelGroup(cmd);
+        break;
+      case "db":
+        await this.handleDbGroup(cmd);
+        break;
+      default:
+        log.warn({ group }, "Unrecognized monitor subcommand group");
+        await cmd.reply({ content: "Unknown subcommand group.", flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  private async handlePanelGroup(cmd: ChatInputCommandInteraction): Promise<void> {
+    const sub = cmd.options.getSubcommand(true);
+    switch (sub) {
+      case "setup":
+        await this.panelHandler.handlePanelSetup(cmd);
+        break;
+      case "refresh":
+        await this.panelHandler.handlePanelRefresh(cmd);
+        break;
+      default:
+        log.warn({ sub }, "Unrecognized monitor panel subcommand");
+        await cmd.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
+    }
+  }
+
+  private async handleDbGroup(cmd: ChatInputCommandInteraction): Promise<void> {
+    const sub = cmd.options.getSubcommand(true);
+    switch (sub) {
+      case "purge-connection":
+        await this.panelHandler.handleDbPurgeConnection(cmd);
+        break;
+      case "purge-all":
+        await this.panelHandler.handleDbPurgeAll(cmd);
+        break;
+      default:
+        log.warn({ sub }, "Unrecognized monitor db subcommand");
+        await cmd.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
+    }
+  }
 }

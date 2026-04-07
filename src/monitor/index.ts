@@ -8,7 +8,7 @@ import { PostQueue } from "./service/queue";
 import { PanelHandler } from "./handlers/panel";
 import { ReviewHandler } from "./handlers/review";
 import { PostHandler } from "./handlers/post";
-import { createInteractionDispatcher } from "./interactions";
+import { InteractionDispatcher } from "./interactions";
 import { registerSlashCommands } from "./commands";
 
 export { registerSlashCommands };
@@ -27,8 +27,10 @@ export function createMonitor(
   const reviewHandler = new ReviewHandler(reviewStore, postQueue, repo, config);
   const postHandler = new PostHandler(repo, config);
 
+  const dispatcher = new InteractionDispatcher(panelHandler, reviewHandler, postHandler);
+
   return {
-    handleInteraction: createInteractionDispatcher(panelHandler, reviewHandler, postHandler),
+    handleInteraction: dispatcher.handleInteraction.bind(dispatcher),
     registerCommands: (applicationId: string, token: string) =>
       registerSlashCommands(applicationId, token),
   };
