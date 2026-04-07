@@ -6,7 +6,7 @@ import { MessageCreateHandler } from "./handlers/MessageCreate";
 import { handleUsageSlash } from "./handlers/usageSlash";
 import { loadMonitorsConfig } from "./monitor/config";
 import { isDevMode } from "./monitor/runtime";
-import { createMonitor } from "./monitor";
+import { createMonitor, registerSlashCommands } from "./monitor";
 import logger from "./logger";
 import { clientHealthy, startHealthCheckServer } from "./server/botHttp";
 
@@ -49,6 +49,10 @@ async function main(): Promise<void> {
     await MessageCreateHandler(message, serverConfig);
   });
 
+  // Always register commands — all slash commands (usage, monitor, post, fetch-all)
+  // are defined globally regardless of whether the monitor feature is enabled.
+  await registerSlashCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
+
   const monitorsConfigPath = config.MONITORS_CONFIG_PATH;
   const monitorsConfig = monitorsConfigPath
     ? loadMonitorsConfig(monitorsConfigPath)
@@ -58,38 +62,56 @@ async function main(): Promise<void> {
     ? createMonitor(config.DB_PATH, monitorsConfig, serverConfig, client)
     : null;
 
-  if (monitor) {
-    await monitor.registerCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
-
-    if (monitorsConfig) {
-      log.info(
-        { connections: monitorsConfig.connections.length },
-        "Monitor feature enabled",
-      );
-    }
+  if (monitorsConfig) {
+    log.info(
+      { connections: monitorsConfig.connections.length },
+      "Monitor feature enabled",
+    );
+  } else {
+    log.info("Monitor feature disabled (MONITORS_CONFIG_PATH not set)");
   }
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (interaction.isChatInputCommand() && interaction.commandName === "usage") {
-      await handleUsageSlash(interaction);
+    if (interaction.isChatInputCommand()) {
+      switch (interaction.commandName) {
+        case "usage":
+          await handleUsageSlash(interaction);
+          break;
+
+        case "monitor":
+        case "post":
+        case "fetch-all":
+          if (monitor) {
+            await monitor.handleInteraction(interaction);
+          } else {
+            await interaction.reply({
+              content: "The monitor feature is not enabled on this instance (`MONITORS_CONFIG_PATH` is not set).",
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          break;
+
+        default:
+          log.warn({ commandName: interaction.commandName }, "Unrecognized slash command");
+          await interaction.reply({
+            content: "Unknown command.",
+            flags: MessageFlags.Ephemeral,
+          });
+      }
       return;
     }
 
-    if (
-      interaction.isChatInputCommand() &&
-      interaction.commandName === "fetch-all" &&
-      !monitor
-    ) {
-      await interaction.reply({
-        content:
-          "The monitor feature is not enabled (set MONITORS_CONFIG_PATH). `/fetch-all` is unavailable.",
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
+    // Buttons, modals, select menus — all belong to the monitor feature.
     if (monitor) {
       await monitor.handleInteraction(interaction);
+      return;
+    }
+
+    if (interaction.isRepliable()) {
+      await interaction.reply({
+        content: "The monitor feature is not enabled on this instance.",
+        flags: MessageFlags.Ephemeral,
+      });
     }
   });
 
