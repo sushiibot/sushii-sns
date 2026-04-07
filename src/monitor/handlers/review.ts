@@ -14,7 +14,6 @@ import {
 import logger from "../../logger";
 import { MediaTooLargeError, sendPostToChannel, type SendPostResult } from "../../utils/discord";
 import { buildReviewBatches, buildReviewStatusEditOptions } from "../view/review";
-import { type MonitorsConfig } from "../config";
 import type { PostQueue } from "../service/queue";
 import type { MonitorRepository } from "../data/repository";
 import {
@@ -48,7 +47,6 @@ export class ReviewHandler {
     private readonly reviewStore: ReviewStore,
     private readonly postQueue: PostQueue,
     private readonly repo: MonitorRepository,
-    private readonly config: MonitorsConfig,
   ) {}
 
   private async replyNotFetcher(
@@ -324,6 +322,7 @@ export class ReviewHandler {
           format: state.format,
           template: state.template,
           postTracking: {
+            guildId: state.guildId,
             connectionId: state.connectionId,
             postId: state.postData.postID,
             sink: this.repo,

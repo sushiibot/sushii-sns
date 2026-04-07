@@ -1,84 +1,109 @@
 import type { Database } from "bun:sqlite";
+import type { Connection, MonitorsConfig } from "../config";
 import type { PostTrackingSink } from "./postTracking";
 import {
+  addMonitor,
   checkIfPostWasPublished,
   getConnectionMeta,
-  getPanelMessage,
+  getMonitorsConfig,
   isPostSeen,
   markPostSeen,
   purgeAllConnectionMeta,
   purgeAllSeenPosts,
   purgeConnectionMeta,
   purgeConnectionSeenPosts,
-  type LastFetch,
-  type PanelMessage,
-  type PostPostedCheck,
+  removeMonitor,
+  updatePanelMessage,
   upsertConnectionMeta,
-  upsertPanelMessage,
+  upsertGuildSettings,
+  upsertGuildTemplate,
   upsertPostedMessageTracking,
+  type GuildChannelSettings,
+  type LastFetch,
+  type PostPostedCheck,
 } from "./queries";
 
-export type { LastFetch, PanelMessage, PostPostedCheck };
+export type { LastFetch, PostPostedCheck };
 
 /**
- * Monitor persistence: panel pointer, per-connection fetch meta, seen/post rows.
- * Implementations hide SQLite; callers do not use `Database` directly.
+ * Monitor persistence: guild config, per-connection fetch state, seen/post rows.
+ * All methods are scoped to a guildId. Implementations hide SQLite; callers do not use Database directly.
  */
 export interface MonitorRepository extends PostTrackingSink {
-  getPanelMessage(panelChannelId: string): PanelMessage | null;
-  upsertPanelMessage(panelChannelId: string, messageId: string): void;
-  getConnectionMeta(connectionId: string): LastFetch | null;
-  upsertConnectionMeta(
-    connectionId: string,
-    lastFetchedAt: number,
-    lastFetchedBy: string,
-  ): void;
-  isPostSeen(connectionId: string, postId: string): boolean;
-  markPostSeen(connectionId: string, postId: string): void;
-  purgeConnectionMeta(connectionId: string): void;
-  purgeAllConnectionMeta(): void;
-  purgeConnectionSeenPosts(connectionId: string): void;
-  purgeAllSeenPosts(): void;
-  checkIfPostWasPublished(connectionId: string, postId: string): PostPostedCheck;
+  // Config
+  getConfig(guildId: string): MonitorsConfig | null;
+  upsertSettings(guildId: string, settings: GuildChannelSettings): void;
+  upsertTemplate(guildId: string, format: "inline" | "links", template: string): void;
+  updatePanelMessage(guildId: string, messageId: string): void;
+  addMonitor(guildId: string, connection: Connection): void;
+  removeMonitor(guildId: string, type: string, handle: string): void;
+
+  // Fetch state
+  getConnectionMeta(guildId: string, connectionId: string): LastFetch | null;
+  upsertConnectionMeta(guildId: string, connectionId: string, lastFetchedAt: number, lastFetchedBy: string): void;
+  purgeConnectionMeta(guildId: string, connectionId: string): void;
+  purgeAllConnectionMeta(guildId: string): void;
+
+  // Post deduplication
+  isPostSeen(guildId: string, connectionId: string, postId: string): boolean;
+  markPostSeen(guildId: string, connectionId: string, postId: string): void;
+  purgeConnectionSeenPosts(guildId: string, connectionId: string): void;
+  purgeAllSeenPosts(guildId: string): void;
+  checkIfPostWasPublished(guildId: string, connectionId: string, postId: string): PostPostedCheck;
 }
 
 export function createMonitorRepository(db: Database): MonitorRepository {
   return {
-    recordPosted(connectionId: string, postId: string, discordMessageId: string): void {
-      upsertPostedMessageTracking(db, connectionId, postId, discordMessageId);
+    recordPosted(guildId, connectionId, postId, discordMessageId) {
+      upsertPostedMessageTracking(db, guildId, connectionId, postId, discordMessageId);
     },
-    getPanelMessage(panelChannelId: string) {
-      return getPanelMessage(db, panelChannelId);
+
+    getConfig(guildId) {
+      return getMonitorsConfig(db, guildId);
     },
-    upsertPanelMessage(panelChannelId: string, messageId: string) {
-      upsertPanelMessage(db, panelChannelId, messageId);
+    upsertSettings(guildId, settings) {
+      upsertGuildSettings(db, guildId, settings);
     },
-    getConnectionMeta(connectionId: string) {
-      return getConnectionMeta(db, connectionId);
+    upsertTemplate(guildId, format, template) {
+      upsertGuildTemplate(db, guildId, format, template);
     },
-    upsertConnectionMeta(connectionId: string, lastFetchedAt: number, lastFetchedBy: string) {
-      upsertConnectionMeta(db, connectionId, lastFetchedAt, lastFetchedBy);
+    updatePanelMessage(guildId, messageId) {
+      updatePanelMessage(db, guildId, messageId);
     },
-    isPostSeen(connectionId: string, postId: string) {
-      return isPostSeen(db, connectionId, postId);
+    addMonitor(guildId, connection) {
+      addMonitor(db, guildId, connection);
     },
-    markPostSeen(connectionId: string, postId: string) {
-      markPostSeen(db, connectionId, postId);
+    removeMonitor(guildId, type, handle) {
+      removeMonitor(db, guildId, type, handle);
     },
-    purgeConnectionMeta(connectionId: string) {
-      purgeConnectionMeta(db, connectionId);
+
+    getConnectionMeta(guildId, connectionId) {
+      return getConnectionMeta(db, guildId, connectionId);
     },
-    purgeAllConnectionMeta() {
-      purgeAllConnectionMeta(db);
+    upsertConnectionMeta(guildId, connectionId, lastFetchedAt, lastFetchedBy) {
+      upsertConnectionMeta(db, guildId, connectionId, lastFetchedAt, lastFetchedBy);
     },
-    purgeConnectionSeenPosts(connectionId: string) {
-      purgeConnectionSeenPosts(db, connectionId);
+    purgeConnectionMeta(guildId, connectionId) {
+      purgeConnectionMeta(db, guildId, connectionId);
     },
-    purgeAllSeenPosts() {
-      purgeAllSeenPosts(db);
+    purgeAllConnectionMeta(guildId) {
+      purgeAllConnectionMeta(db, guildId);
     },
-    checkIfPostWasPublished(connectionId: string, postId: string) {
-      return checkIfPostWasPublished(db, connectionId, postId);
+
+    isPostSeen(guildId, connectionId, postId) {
+      return isPostSeen(db, guildId, connectionId, postId);
+    },
+    markPostSeen(guildId, connectionId, postId) {
+      markPostSeen(db, guildId, connectionId, postId);
+    },
+    purgeConnectionSeenPosts(guildId, connectionId) {
+      purgeConnectionSeenPosts(db, guildId, connectionId);
+    },
+    purgeAllSeenPosts(guildId) {
+      purgeAllSeenPosts(db, guildId);
+    },
+    checkIfPostWasPublished(guildId, connectionId, postId) {
+      return checkIfPostWasPublished(db, guildId, connectionId, postId);
     },
   };
 }

@@ -12,21 +12,21 @@ import logger from "../../logger";
 import type { AnySnsMetadata, SnsLink } from "../../platforms/base";
 import { MediaTooLargeError, sendPostToChannel } from "../../utils/discord";
 import { parseUsernameFromUrl } from "../../utils/socialUrls";
-import { ConnectionTypeSchema, getConnectionId, type ConnectionType, type MonitorsConfig } from "../config";
+import { ConnectionTypeSchema, getConnectionId, type ConnectionType } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { findAllSnsLinks, snsService } from "../../handlers/sns";
 
 const log = logger.child({ module: "monitor/handlers/post" });
+
+const NOT_CONFIGURED_MSG =
+  "Monitor is not configured for this server. Use `/monitor config setup` to get started.";
 
 export type ConfirmationResult =
   | { confirmed: true }
   | { confirmed: false; reason: "skipped" | "timeout" | "error" };
 
 export class PostHandler {
-  constructor(
-    private readonly repo: MonitorRepository,
-    private readonly config: MonitorsConfig,
-  ) {}
+  constructor(private readonly repo: MonitorRepository) {}
 
   async promptRepostConfirmation(
     interaction: ChatInputCommandInteraction,
@@ -62,32 +62,35 @@ export class PostHandler {
       });
 
       if (confirmation.customId === "post_confirm_no") {
-        await confirmMsg.edit({
-          content: "⏭️ Skipped.",
-          components: [],
-        });
+        await confirmMsg.edit({ content: "⏭️ Skipped.", components: [] });
         return { confirmed: false, reason: "skipped" };
       }
 
-      await confirmMsg.edit({
-        content: "🔄 Posting again...",
-        components: [],
-      });
+      await confirmMsg.edit({ content: "🔄 Posting again...", components: [] });
       return { confirmed: true };
     } catch {
       await confirmMsg.edit({
         content: "⏰ Confirmation timed out — skipping post.",
         components: [],
       }).catch(() => {});
-
       return { confirmed: false, reason: "timeout" };
     }
   }
 
-  async handlePostCommand(
-    interaction: ChatInputCommandInteraction,
-  ): Promise<void> {
+  async handlePostCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply();
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply("Must be used in a guild.");
+      return;
+    }
+
+    const config = this.repo.getConfig(guildId);
+    if (!config) {
+      await interaction.editReply(NOT_CONFIGURED_MSG);
+      return;
+    }
 
     const postUrl = interaction.options.getString("url", true);
     log.debug({ requester: interaction.user.username, url: postUrl }, "Processing /post");
@@ -98,7 +101,7 @@ export class PostHandler {
       return;
     }
 
-    const socialsChannel = await interaction.client.channels.fetch(this.config.socials_channel_id);
+    const socialsChannel = await interaction.client.channels.fetch(config.socials_channel_id);
     if (!socialsChannel || !("send" in socialsChannel)) {
       await interaction.editReply("❌ Could not find the socials channel.");
       return;
@@ -114,11 +117,7 @@ export class PostHandler {
 
       if (canCheckBeforeFetch && username && postId && connectionTypeParsed.success) {
         const preConnectionId = getConnectionId({ type: connectionTypeParsed.data, handle: username });
-        const confirmed = await this.checkDuplicateBeforeFetch(
-          preConnectionId,
-          postId,
-          interaction,
-        );
+        const confirmed = await this.checkDuplicateBeforeFetch(guildId, config, preConnectionId, postId, interaction);
         if (!confirmed) return;
       }
 
@@ -128,22 +127,14 @@ export class PostHandler {
         return;
       }
 
-      // Instagram URLs don't include the username, so canCheckBeforeFetch is
-      // false for Instagram. We do the duplicate check here after fetching post
-      // metadata, which gives us the username needed to look up the connection.
-      // Twitter and TikTok include enough info in the URL to check before fetching.
       if (
         connectionTypeParsed.success &&
         (platform === "instagram" || platform === "instagram-story") &&
         postData.username
       ) {
         const igConnectionId = getConnectionId({ type: connectionTypeParsed.data, handle: postData.username });
-        if (isConnectionMonitored(this.config, igConnectionId)) {
-          const confirmed = await this.checkDuplicateBeforeFetch(
-            igConnectionId,
-            postData.postID,
-            interaction,
-          );
+        if (isConnectionMonitored(config, igConnectionId)) {
+          const confirmed = await this.checkDuplicateBeforeFetch(guildId, config, igConnectionId, postData.postID, interaction);
           if (!confirmed) return;
         }
       }
@@ -153,7 +144,7 @@ export class PostHandler {
         (platform === "instagram" || platform === "instagram-story") &&
         !!postData.username &&
         isConnectionMonitored(
-          this.config,
+          config,
           getConnectionId({ type: connectionTypeParsed.data, handle: postData.username }),
         );
 
@@ -162,11 +153,12 @@ export class PostHandler {
         : undefined;
 
       const result = await sendPostToChannel(socialsChannel as SendableChannels, postData, {
-        format: this.config.format,
-        template: this.config.template,
+        format: config.format,
+        template: config.template,
         ...(trackInDb && connectionIdForDb && postData.postID
           ? {
               postTracking: {
+                guildId,
                 connectionId: connectionIdForDb,
                 postId: postData.postID,
                 sink: this.repo,
@@ -194,26 +186,23 @@ export class PostHandler {
       try {
         await interaction.editReply("❌ Something went wrong. Please try again.");
       } catch {
-        // editReply can fail if deferReply never completed; swallow secondary error
+        // editReply can fail if deferReply never completed
       }
     }
   }
 
   private async checkDuplicateBeforeFetch(
+    guildId: string,
+    config: { connections: Array<{ type: string; handle: string }>; socials_channel_id: string },
     connectionId: string,
     postId: string,
     interaction: ChatInputCommandInteraction,
   ): Promise<boolean> {
-    if (!isConnectionMonitored(this.config, connectionId)) return true;
+    if (!isConnectionMonitored(config, connectionId)) return true;
 
-    const check = this.repo.checkIfPostWasPublished(connectionId, postId);
-
+    const check = this.repo.checkIfPostWasPublished(guildId, connectionId, postId);
     if (check.wasPosted) {
-      const result = await this.promptRepostConfirmation(
-        interaction,
-        this.config.socials_channel_id,
-        check.messageId,
-      );
+      const result = await this.promptRepostConfirmation(interaction, config.socials_channel_id, check.messageId);
       return result.confirmed;
     }
     return true;
@@ -229,27 +218,12 @@ function extractConnectionInfo(link: SnsLink<AnySnsMetadata>): {
 
   switch (metadata.platform) {
     case "twitter":
-      return {
-        username: metadata.username,
-        postId: metadata.id,
-        canCheckBeforeFetch: true,
-      };
-
+      return { username: metadata.username, postId: metadata.id, canCheckBeforeFetch: true };
     case "tiktok":
-      return {
-        username: parseUsernameFromUrl(url),
-        postId: metadata.videoId,
-        canCheckBeforeFetch: true,
-      };
-
+      return { username: parseUsernameFromUrl(url), postId: metadata.videoId, canCheckBeforeFetch: true };
     case "instagram":
     case "instagram-story":
-      return {
-        username: metadata.username,
-        postId: metadata.shortcode,
-        canCheckBeforeFetch: false,
-      };
-
+      return { username: metadata.username, postId: metadata.shortcode, canCheckBeforeFetch: false };
     default:
       return { username: undefined, postId: undefined, canCheckBeforeFetch: false };
   }

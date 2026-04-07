@@ -21,7 +21,6 @@ const schema = z.object({
 
   SERVER_CONFIG_PATH: z.string().optional(),
 
-  MONITORS_CONFIG_PATH: z.string().optional(),
   DB_PATH: z.string().optional().default("./data.db"),
 });
 

@@ -1,21 +1,11 @@
 import { Database } from "bun:sqlite";
 import logger from "../../logger";
+import type { Connection, ConnectionType, MonitorsConfig } from "../config";
 import { METADATA_MIGRATIONS } from "./schema";
 
 const log = logger.child({ module: "monitor/db" });
 
 export type LastFetch = {
-  last_fetched_at: number;
-  last_fetched_by: string;
-};
-
-export type PanelMessage = {
-  panel_channel_id: string;
-  message_id: string;
-};
-
-export type ConnectionMeta = {
-  connection_id: string;
   last_fetched_at: number;
   last_fetched_by: string;
 };
@@ -46,131 +36,284 @@ export function openMetadataDb(path: string): Database {
   const db = new Database(path, { create: true });
 
   db.exec("PRAGMA journal_mode=WAL;");
+  db.exec("PRAGMA foreign_keys=ON;");
   runMigrations(db, METADATA_MIGRATIONS);
 
   return db;
 }
 
-// SQL query functions — internal to data/. Only import from data/repository.ts.
-
-export function getPanelMessage(
-  db: Database,
-  panelChannelId: string,
-): PanelMessage | null {
-  const row = db
-    .query<PanelMessage, [string]>(
-      "SELECT panel_channel_id, message_id FROM monitor_panel_messages WHERE panel_channel_id = ?",
-    )
-    .get(panelChannelId);
-  return row ?? null;
+/** Split "type:handle" into parts, returns null if malformed. */
+function splitConnectionId(connectionId: string): { type: string; handle: string } | null {
+  const idx = connectionId.indexOf(":");
+  if (idx === -1) return null;
+  const type = connectionId.slice(0, idx);
+  const handle = connectionId.slice(idx + 1);
+  if (!type || !handle) return null;
+  return { type, handle };
 }
 
-export function upsertPanelMessage(
+// ---------------------------------------------------------------------------
+// Config — guild_settings + monitors
+// ---------------------------------------------------------------------------
+
+type GuildSettingsRow = {
+  panel_channel_id: string;
+  panel_message_id: string | null;
+  socials_channel_id: string;
+  trigger_role_id: string | null;
+  log_channel_id: string | null;
+  format: string;
+  template: string;
+};
+
+type MonitorRow = {
+  type: string;
+  handle: string;
+  cooldown_seconds: number;
+};
+
+export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig | null {
+  const settings = db
+    .query<GuildSettingsRow, [string]>(
+      `SELECT panel_channel_id, panel_message_id, socials_channel_id,
+              trigger_role_id, log_channel_id, format, template
+       FROM guild_settings WHERE guild_id = ?`,
+    )
+    .get(guildId);
+
+  if (!settings) return null;
+
+  const rows = db
+    .query<MonitorRow, [string]>(
+      `SELECT type, handle, cooldown_seconds
+       FROM monitors WHERE guild_id = ? ORDER BY type, handle`,
+    )
+    .all(guildId);
+
+  const connections: Connection[] = rows.map((r) => ({
+    type: r.type as ConnectionType,
+    handle: r.handle,
+    cooldown_seconds: r.cooldown_seconds,
+  }));
+
+  return {
+    panel_channel_id: settings.panel_channel_id,
+    panel_message_id: settings.panel_message_id ?? null,
+    socials_channel_id: settings.socials_channel_id,
+    trigger_role_id: settings.trigger_role_id ?? null,
+    log_channel_id: settings.log_channel_id ?? null,
+    format: settings.format as "links" | "inline",
+    template: settings.template,
+    connections,
+  };
+}
+
+export type GuildChannelSettings = Pick<
+  MonitorsConfig,
+  "panel_channel_id" | "socials_channel_id" | "trigger_role_id" | "log_channel_id"
+>;
+
+export function upsertGuildSettings(
   db: Database,
-  panelChannelId: string,
-  messageId: string,
+  guildId: string,
+  settings: GuildChannelSettings,
 ): void {
   db.query(
-    "INSERT INTO monitor_panel_messages (panel_channel_id, message_id) VALUES (?, ?) ON CONFLICT(panel_channel_id) DO UPDATE SET message_id = excluded.message_id",
-  ).run(panelChannelId, messageId);
+    `INSERT INTO guild_settings
+       (guild_id, panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       panel_channel_id   = excluded.panel_channel_id,
+       socials_channel_id = excluded.socials_channel_id,
+       trigger_role_id    = excluded.trigger_role_id,
+       log_channel_id     = excluded.log_channel_id`,
+  ).run(
+    guildId,
+    settings.panel_channel_id,
+    settings.socials_channel_id,
+    settings.trigger_role_id,
+    settings.log_channel_id,
+  );
 }
+
+export function upsertGuildTemplate(
+  db: Database,
+  guildId: string,
+  format: "inline" | "links",
+  template: string,
+): void {
+  db.query(
+    `UPDATE guild_settings SET format = ?, template = ? WHERE guild_id = ?`,
+  ).run(format, template, guildId);
+}
+
+export function updatePanelMessage(db: Database, guildId: string, messageId: string): void {
+  db.query(
+    `UPDATE guild_settings SET panel_message_id = ? WHERE guild_id = ?`,
+  ).run(messageId, guildId);
+}
+
+export function addMonitor(db: Database, guildId: string, connection: Connection): void {
+  db.query(
+    `INSERT INTO monitors (guild_id, type, handle, cooldown_seconds)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(guild_id, type, handle) DO UPDATE SET
+       cooldown_seconds = excluded.cooldown_seconds`,
+  ).run(guildId, connection.type, connection.handle, connection.cooldown_seconds);
+}
+
+export function removeMonitor(db: Database, guildId: string, type: string, handle: string): void {
+  db.query(
+    `DELETE FROM monitors WHERE guild_id = ? AND type = ? AND handle = ?`,
+  ).run(guildId, type, handle);
+}
+
+// ---------------------------------------------------------------------------
+// Connection fetch state — last_fetched_at / last_fetched_by on monitors row
+// ---------------------------------------------------------------------------
 
 export function getConnectionMeta(
   db: Database,
+  guildId: string,
   connectionId: string,
 ): LastFetch | null {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return null;
+
   const row = db
-    .query<ConnectionMeta, [string]>(
-      "SELECT connection_id, last_fetched_at, last_fetched_by FROM monitor_connection_meta WHERE connection_id = ?",
+    .query<{ last_fetched_at: number | null; last_fetched_by: string | null }, [string, string, string]>(
+      `SELECT last_fetched_at, last_fetched_by FROM monitors
+       WHERE guild_id = ? AND type = ? AND handle = ?`,
     )
-    .get(connectionId);
-  return row
-    ? {
-        last_fetched_at: row.last_fetched_at,
-        last_fetched_by: row.last_fetched_by,
-      }
-    : null;
+    .get(guildId, parts.type, parts.handle);
+
+  if (!row || row.last_fetched_at === null || row.last_fetched_by === null) return null;
+  return { last_fetched_at: row.last_fetched_at, last_fetched_by: row.last_fetched_by };
 }
 
 export function upsertConnectionMeta(
   db: Database,
+  guildId: string,
   connectionId: string,
   lastFetchedAt: number,
   lastFetchedBy: string,
 ): void {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
   db.query(
-    "INSERT INTO monitor_connection_meta (connection_id, last_fetched_at, last_fetched_by) VALUES (?, ?, ?) ON CONFLICT(connection_id) DO UPDATE SET last_fetched_at = excluded.last_fetched_at, last_fetched_by = excluded.last_fetched_by",
-  ).run(connectionId, lastFetchedAt, lastFetchedBy);
+    `UPDATE monitors SET last_fetched_at = ?, last_fetched_by = ?
+     WHERE guild_id = ? AND type = ? AND handle = ?`,
+  ).run(lastFetchedAt, lastFetchedBy, guildId, parts.type, parts.handle);
 }
+
+export function purgeConnectionMeta(db: Database, guildId: string, connectionId: string): void {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
+  db.query(
+    `UPDATE monitors SET last_fetched_at = NULL, last_fetched_by = NULL
+     WHERE guild_id = ? AND type = ? AND handle = ?`,
+  ).run(guildId, parts.type, parts.handle);
+}
+
+export function purgeAllConnectionMeta(db: Database, guildId: string): void {
+  db.query(
+    `UPDATE monitors SET last_fetched_at = NULL, last_fetched_by = NULL WHERE guild_id = ?`,
+  ).run(guildId);
+}
+
+// ---------------------------------------------------------------------------
+// Posts — seen / posted deduplication
+// ---------------------------------------------------------------------------
 
 export function isPostSeen(
   db: Database,
+  guildId: string,
   connectionId: string,
   postId: string,
 ): boolean {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return false;
+
   const row = db
-    .query<{ count: number }, [string, string]>(
-      "SELECT COUNT(*) as count FROM monitor_seen_posts WHERE connection_id = ? AND post_id = ?",
+    .query<{ count: number }, [string, string, string, string]>(
+      `SELECT COUNT(*) as count FROM posts
+       WHERE guild_id = ? AND type = ? AND handle = ? AND post_id = ?`,
     )
-    .get(connectionId, postId);
+    .get(guildId, parts.type, parts.handle, postId);
   return (row?.count ?? 0) > 0;
 }
 
 export function markPostSeen(
   db: Database,
+  guildId: string,
   connectionId: string,
   postId: string,
 ): void {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
   db.query(
-    "INSERT OR IGNORE INTO monitor_seen_posts (connection_id, post_id, seen_at) VALUES (?, ?, ?)",
-  ).run(connectionId, postId, Date.now());
-}
-
-export function purgeConnectionMeta(db: Database, connectionId: string): void {
-  db.query("DELETE FROM monitor_connection_meta WHERE connection_id = ?").run(connectionId);
-}
-
-export function purgeAllConnectionMeta(db: Database): void {
-  db.exec("DELETE FROM monitor_connection_meta");
-}
-
-export function purgeConnectionSeenPosts(db: Database, connectionId: string): void {
-  db.query("DELETE FROM monitor_seen_posts WHERE connection_id = ? AND posted_message_id IS NULL").run(connectionId);
-}
-
-export function purgeAllSeenPosts(db: Database): void {
-  db.exec("DELETE FROM monitor_seen_posts");
+    `INSERT OR IGNORE INTO posts (guild_id, type, handle, post_id, seen_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(guildId, parts.type, parts.handle, postId, Date.now());
 }
 
 export function checkIfPostWasPublished(
   db: Database,
+  guildId: string,
   connectionId: string,
   postId: string,
 ): PostPostedCheck {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return { wasPosted: false, messageId: null };
+
   const row = db
-    .query<{ posted_message_id: string | null }, [string, string]>(
-      "SELECT posted_message_id FROM monitor_seen_posts WHERE connection_id = ? AND post_id = ?",
+    .query<{ posted_message_id: string | null }, [string, string, string, string]>(
+      `SELECT posted_message_id FROM posts
+       WHERE guild_id = ? AND type = ? AND handle = ? AND post_id = ?`,
     )
-    .get(connectionId, postId);
+    .get(guildId, parts.type, parts.handle, postId);
+
   const messageId = row?.posted_message_id ?? null;
-  if (messageId !== null) {
-    return { wasPosted: true as const, messageId };
-  }
+  if (messageId !== null) return { wasPosted: true as const, messageId };
   return { wasPosted: false as const, messageId: null };
 }
 
 export function upsertPostedMessageTracking(
   db: Database,
+  guildId: string,
   connectionId: string,
   postId: string,
   discordMessageId: string,
 ): void {
-  db.run(
-    `INSERT INTO monitor_seen_posts (connection_id, post_id, seen_at, posted_message_id)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(connection_id, post_id) DO UPDATE SET
-       seen_at = excluded.seen_at,
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
+  db.query(
+    `INSERT INTO posts (guild_id, type, handle, post_id, seen_at, posted_message_id)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id, type, handle, post_id) DO UPDATE SET
+       seen_at           = excluded.seen_at,
        posted_message_id = excluded.posted_message_id`,
-    [connectionId, postId, Date.now(), discordMessageId],
-  );
+  ).run(guildId, parts.type, parts.handle, postId, Date.now(), discordMessageId);
+}
+
+export function purgeConnectionSeenPosts(
+  db: Database,
+  guildId: string,
+  connectionId: string,
+): void {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
+  db.query(
+    `DELETE FROM posts
+     WHERE guild_id = ? AND type = ? AND handle = ? AND posted_message_id IS NULL`,
+  ).run(guildId, parts.type, parts.handle);
+}
+
+export function purgeAllSeenPosts(db: Database, guildId: string): void {
+  db.query(`DELETE FROM posts WHERE guild_id = ?`).run(guildId);
 }

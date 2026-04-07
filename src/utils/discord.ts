@@ -105,6 +105,7 @@ export interface SendPostOptions {
   suppressEmbeds?: boolean;
   /** Optional: record first sent message id in monitor DB (see PostTrackingSink) */
   postTracking?: {
+    guildId: string;
     connectionId: string;
     postId: string;
     sink: PostTrackingSink;
@@ -249,6 +250,7 @@ export async function sendPostToChannel(
   if (postTracking && result.messageIds.length > 0) {
     try {
       postTracking.sink.recordPosted(
+        postTracking.guildId,
         postTracking.connectionId,
         postTracking.postId,
         result.messageIds[0],

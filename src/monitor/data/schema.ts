@@ -1,29 +1,41 @@
+// Breaking change from pre-v1 schema — delete data.db when upgrading.
 // Each entry is an array of SQL statements for that migration version.
 // On startup, runMigrations applies pending migrations in order and updates PRAGMA user_version.
 
 export const METADATA_MIGRATIONS: string[][] = [
-  // Migration 0 — initial schema
+  // Migration 0 — multi-guild schema
   [
-    `CREATE TABLE IF NOT EXISTS monitor_panel_messages (
-      panel_channel_id TEXT NOT NULL PRIMARY KEY,
-      message_id TEXT NOT NULL
+    `CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id TEXT NOT NULL PRIMARY KEY,
+      panel_channel_id TEXT NOT NULL,
+      panel_message_id TEXT,
+      socials_channel_id TEXT NOT NULL,
+      trigger_role_id TEXT,
+      log_channel_id TEXT,
+      format TEXT NOT NULL DEFAULT 'inline',
+      template TEXT NOT NULL DEFAULT ''
     )`,
 
-    `CREATE TABLE IF NOT EXISTS monitor_connection_meta (
-      connection_id TEXT NOT NULL PRIMARY KEY,
-      last_fetched_at INTEGER NOT NULL,
-      last_fetched_by TEXT NOT NULL
+    `CREATE TABLE IF NOT EXISTS monitors (
+      guild_id TEXT NOT NULL REFERENCES guild_settings(guild_id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      handle TEXT NOT NULL,
+      ig_id TEXT,
+      cooldown_seconds INTEGER NOT NULL DEFAULT 300,
+      last_fetched_at INTEGER,
+      last_fetched_by TEXT,
+      PRIMARY KEY (guild_id, type, handle)
     )`,
-  ],
-  // Migration 1 — seen/post dedupe and posted-message tracking
-  [
-    `CREATE TABLE IF NOT EXISTS monitor_seen_posts (
-      connection_id TEXT NOT NULL,
+
+    `CREATE TABLE IF NOT EXISTS posts (
+      guild_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      handle TEXT NOT NULL,
       post_id TEXT NOT NULL,
       seen_at INTEGER NOT NULL,
       posted_message_id TEXT,
-      PRIMARY KEY (connection_id, post_id)
+      PRIMARY KEY (guild_id, type, handle, post_id),
+      FOREIGN KEY (guild_id, type, handle) REFERENCES monitors(guild_id, type, handle) ON DELETE CASCADE
     )`,
-    `CREATE INDEX IF NOT EXISTS idx_monitor_seen_posts_connection_id ON monitor_seen_posts(connection_id)`,
   ],
 ];

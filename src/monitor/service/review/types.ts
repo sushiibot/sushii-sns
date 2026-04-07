@@ -12,6 +12,7 @@ export const REVIEW_SKIP_PREFIX = "monitor:review:skip:";
 
 export interface ReviewState {
   postData: PostData<AnySnsMetadata>;
+  guildId: string;
   connectionId: string;
   removedIndices: Set<number>;
   customContent: string | null;
