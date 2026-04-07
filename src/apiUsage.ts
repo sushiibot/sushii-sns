@@ -15,7 +15,6 @@ export const ApiUsageEndpoint = {
   RAPIDAPI_IG120_STORY_SINGLE: "rapidapi_ig120_story_single",
   RAPIDAPI_IG120_POSTS: "rapidapi_ig120_posts",
   RAPIDAPI_IG120_STORIES_FEED: "rapidapi_ig120_stories_feed",
-  RAPIDAPI_IG_LOOTER_USER_FEEDS2: "rapidapi_ig_looter_user_feeds2",
   RAPIDAPI_TIKTOK_BEST_VIDEO: "rapidapi_tiktok_best_video",
   RAPIDAPI_TIKTOK_BEST_USER_FEED: "rapidapi_tiktok_best_user_feed",
   RAPIDAPI_TIKTOK_API6_USER_VIDEOS: "rapidapi_tiktok_api6_user_videos",
@@ -59,11 +58,6 @@ const ENDPOINT_META: Record<ApiUsageEndpointKey, EndpointMeta> = {
   [ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED]: {
     provider: "rapidapi",
     label: "instagram120 — POST stories (feed)",
-    quotaHint: "—",
-  },
-  [ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_USER_FEEDS2]: {
-    provider: "rapidapi",
-    label: "instagram-looter2 — GET user-feeds2",
     quotaHint: "—",
   },
   [ApiUsageEndpoint.RAPIDAPI_TIKTOK_BEST_VIDEO]: {

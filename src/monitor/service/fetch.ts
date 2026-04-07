@@ -6,7 +6,7 @@ import logger from "../../logger";
 import { getFileExtFromURL } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
 import type { AnySnsMetadata, PostData } from "../../platforms/base";
-import type { MonitorsConfig, Connection } from "../config";
+import type { Connection } from "../config";
 import { getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { fetchInstagramConnectionPosts } from "./fetch/instagram";
@@ -77,15 +77,11 @@ export async function fetchConnectionPosts(
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
   if (connection.type === "instagram") {
-    if (!connection.igId) {
-      log.warn({ handle: connection.handle }, "fetchConnectionPosts: skipping Instagram connection without igId");
-      return [];
-    }
     const igOpts = {
       ...seenOpts,
       profileMarkSeenOnly: seenOpts.profileMarkSeenOnly ?? seenOpts.markSeenOnly ?? false,
     };
-    return fetchInstagramConnectionPosts(connection.handle, connection.igId, downloadFn, igOpts);
+    return fetchInstagramConnectionPosts(connection.handle, downloadFn, igOpts);
   } else if (connection.type === "tiktok") {
     return fetchTiktokFeed(connection.handle, downloadFn, {
       ...seenOpts,
@@ -109,19 +105,20 @@ export async function fetchConnectionPosts(
  * Updates last-fetch metadata per connection.
  */
 export async function syncAllMonitorConnections(
-  monitorsConfig: MonitorsConfig,
+  guildId: string,
+  connections: Connection[],
   monitorRepo: MonitorRepository,
   opts?: { lastFetchedBy?: string },
 ): Promise<void> {
   const lastFetchedBy = opts?.lastFetchedBy ?? "fetch-all";
   const now = Date.now();
 
-  for (const connection of monitorsConfig.connections) {
+  for (const connection of connections) {
     const connectionId = getConnectionId(connection);
 
     const shared = {
-      isPostSeen: (id: string) => monitorRepo.isPostSeen(connectionId, id),
-      markPostSeen: (id: string) => monitorRepo.markPostSeen(connectionId, id),
+      isPostSeen: (id: string) => monitorRepo.isPostSeen(guildId, connectionId, id),
+      markPostSeen: (id: string) => monitorRepo.markPostSeen(guildId, connectionId, id),
     };
 
     try {
@@ -132,7 +129,7 @@ export async function syncAllMonitorConnections(
         storiesMarkSeenOnly: true,
       });
 
-      monitorRepo.upsertConnectionMeta(connectionId, now, lastFetchedBy);
+      monitorRepo.upsertConnectionMeta(guildId, connectionId, now, lastFetchedBy);
     } catch (err) {
       log.error({ err, connectionId }, "fetch-all: connection sync failed");
     }

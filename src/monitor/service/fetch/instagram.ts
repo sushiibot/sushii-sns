@@ -145,78 +145,6 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
   return nodes;
 }
 
-export function parseRapidApiPostsResponseLooter(json: any): NormalizedFeedNode[] {
-  const edges = json?.data?.user?.edge_owner_to_timeline_media?.edges;
-
-  if (!Array.isArray(edges)) {
-    log.error({
-      rootKeys: Object.keys(json ?? {}),
-      dataKeys: json?.data ? Object.keys(json.data) : "no data",
-      userKeys: json?.data?.user ? Object.keys(json.data.user) : "no user",
-    }, "Unknown RapidAPI-Looter /user-feeds2 response shape");
-    throw new Error("RapidAPI-Looter /user-feeds2 returned unexpected response format");
-  }
-
-  const nodes: NormalizedFeedNode[] = [];
-
-  for (const edge of edges) {
-    const node = edge.node;
-    if (!node) continue;
-
-    const shortcode = node.shortcode;
-    if (!shortcode) continue;
-
-    const meta = {
-      title: node.edge_media_to_caption?.edges?.[0]?.node?.text ?? "",
-      sourceUrl: `https://www.instagram.com/p/${shortcode}/`,
-      shortcode,
-      username: node.owner?.username,
-      takenAt: node.taken_at_timestamp,
-    };
-
-    const isCarousel =
-      node.__typename === "GraphSidecar" ||
-      !!node.edge_sidecar_to_children;
-
-    if (isCarousel) {
-      const children = node.edge_sidecar_to_children?.edges;
-
-      if (Array.isArray(children) && children.length > 0) {
-        const carouselUrls = children
-          .map((child: any) => {
-            const slide = child.node;
-            return slide.video_url ?? slide.display_url;
-          })
-          .filter((u: unknown): u is string => typeof u === "string" && u.length > 0);
-
-        if (carouselUrls.length > 0) {
-          nodes.push({ shortcode, needsCarouselApiFetch: false, meta, carouselUrls });
-          continue;
-        }
-      }
-
-      log.warn({ shortcode }, "Carousel detected but no children found");
-      continue;
-    }
-
-    const mediaUrl = node.video_url ?? node.display_url;
-    if (!mediaUrl) {
-      log.warn({ shortcode }, "No media URL found, skipping");
-      continue;
-    }
-
-    nodes.push({
-      shortcode,
-      needsCarouselApiFetch: false,
-      meta,
-      singleMediaUrl: mediaUrl,
-      isVideo: node.is_video === true,
-    });
-  }
-
-  return nodes;
-}
-
 /**
  * List-only: RapidAPI120 /posts → normalized feed nodes.
  */
@@ -261,52 +189,6 @@ async function listIgProfilePostsViaRapidApi120(
 
   const rawJson = await res.json();
   return parseRapidApiPostsResponse120(rawJson);
-}
-
-/**
- * List-only: RapidAPI-Looter /user-feeds2 → normalized feed nodes.
- */
-async function listIgProfilePostsViaRapidApiLooter(
-  igUsername: string,
-  igId: string,
-): Promise<NormalizedFeedNode[]> {
-  if (isDevMode()) {
-    const mock = loadMockJson<any>("instagram-post-rapidapi-looter.json");
-    return parseRapidApiPostsResponseLooter(mock);
-  }
-
-  const req = new Request(
-    `https://instagram-looter2.p.rapidapi.com/user-feeds2?id=${igId}&count=4`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "x-rapidapi-host": "instagram-looter2.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
-      },
-    },
-  );
-
-  const res = await fetch(req);
-  recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_USER_FEEDS2);
-  if (!res.ok) {
-    const errorBody = await extractErrorBody(res);
-    log.error(
-      {
-        status: res.status,
-        statusText: res.statusText,
-        errorBody,
-        url: req.url,
-      },
-      "RapidAPI-Looter /user-feeds2 failed",
-    );
-    throw new Error(
-      `RapidAPI-Looter /user-feeds2 failed: ${res.status} ${res.statusText} - ${typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)}`,
-    );
-  }
-
-  const rawJson = await res.json();
-  return parseRapidApiPostsResponseLooter(rawJson);
 }
 
 /**
@@ -409,7 +291,6 @@ async function orchestrateIgProfileNodes(
  */
 async function fetchIgProfilePosts(
   igUsername: string,
-  igId: string,
   downloadFilesFromUrls: DownloadFilesFromUrls,
   options?: {
     isPostSeen?: (id: string) => boolean;
@@ -419,13 +300,6 @@ async function fetchIgProfilePosts(
   },
 ): Promise<PostData<InstagramMetadata>[]> {
   return tryWithFallbacks([
-    {
-      name: "RapidAPI-Looter /user-feeds2",
-      fn: async () => {
-        const nodes = await listIgProfilePostsViaRapidApiLooter(igUsername, igId);
-        return orchestrateIgProfileNodes(nodes, igUsername, downloadFilesFromUrls, options);
-      },
-    },
     {
       name: "RapidAPI120 /posts",
       fn: async () => {
@@ -438,7 +312,6 @@ async function fetchIgProfilePosts(
 
 export async function fetchInstagramConnectionPosts(
   igUsername: string,
-  igId: string,
   downloadFilesFromUrls: DownloadFilesFromUrls,
   options?: {
     isPostSeen?: (id: string) => boolean;
@@ -454,7 +327,7 @@ export async function fetchInstagramConnectionPosts(
     : undefined;
 
   const [profileResult, storiesResult] = await Promise.allSettled([
-    fetchIgProfilePosts(igUsername, igId, downloadFilesFromUrls, profileOptions),
+    fetchIgProfilePosts(igUsername, downloadFilesFromUrls, profileOptions),
     fetchInstagramStories(igUsername, downloadFilesFromUrls, options),
   ]);
 
