@@ -34,9 +34,6 @@ import type { PanelHandler } from "./panel";
 
 const log = logger.child({ module: "monitor/handlers/config" });
 
-const COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;
-const DEFAULT_COOLDOWN_SECONDS = 300;
-
 // ---------------------------------------------------------------------------
 // URL parsing
 // ---------------------------------------------------------------------------
@@ -70,6 +67,9 @@ export class ConfigHandler {
    * the same guild don't clobber each other's state.
    */
   private pendingSettings = new Map<string, Partial<GuildChannelSettings>>();
+
+  private static readonly COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;
+  private static readonly DEFAULT_COOLDOWN_SECONDS = 300;
 
   constructor(
     private readonly repo: MonitorRepository,
@@ -105,7 +105,7 @@ export class ConfigHandler {
 
   private attachCollector(msg: Message, guildId: string, ownerId: string, messageId: string): void {
     const collector = msg.createMessageComponentCollector({
-      time: COLLECTOR_TIMEOUT_MS,
+      time: ConfigHandler.COLLECTOR_TIMEOUT_MS,
     });
 
     collector.on("collect", async (interaction) => {
@@ -386,7 +386,7 @@ export class ConfigHandler {
     }
 
     try {
-      this.repo.addMonitor(guildId, { type: parsed.type, handle: parsed.handle, cooldown_seconds: DEFAULT_COOLDOWN_SECONDS });
+      this.repo.addMonitor(guildId, { type: parsed.type, handle: parsed.handle, cooldown_seconds: ConfigHandler.DEFAULT_COOLDOWN_SECONDS });
     } catch (err) {
       log.error({ err, guildId, ...parsed }, "Failed to add monitor connection");
       await interaction.reply({ content: "Failed to add connection.", flags: MessageFlags.Ephemeral });

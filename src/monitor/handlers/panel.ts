@@ -375,9 +375,9 @@ export class PanelHandler {
     this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
 
     if (connection.type === "instagram") {
-      const cappedPosts = regularPosts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL);
+      const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);
       await interaction.editReply(
-        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${cappedPosts.length} post${cappedPosts.length === 1 ? "" : "s"}). Review messages created below.`,
+        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}). Review messages created below.`,
       );
     } else {
       await interaction.editReply(
