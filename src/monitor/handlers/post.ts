@@ -1,6 +1,5 @@
 import {
   ActionRowBuilder,
-  MessageFlags,
   type ChatInputCommandInteraction,
   ButtonBuilder,
   ButtonStyle,
@@ -14,6 +13,7 @@ import { parseUsernameFromUrl } from "../../utils/socialUrls";
 import { ConnectionTypeSchema, getConnectionId, type ConnectionType } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { findAllSnsLinks, snsService } from "../../handlers/sns";
+import { ephemeralConfirm, editError, editSuccess, editInfo } from "../view/ephemeral";
 
 const log = logger.child({ module: "monitor/handlers/post" });
 
@@ -47,11 +47,12 @@ export class PostHandler {
         .setStyle(ButtonStyle.Danger),
     );
 
-    const confirmMsg = await interaction.followUp({
-      content: `⚠️ This post was already sent to the socials channel.${existingPostLink}\n\nDo you want to post it again?`,
-      components: [confirmRow],
-      flags: MessageFlags.Ephemeral,
-    });
+    const confirmMsg = await interaction.followUp(
+      ephemeralConfirm(
+        `⚠️ This post was already sent to the socials channel.${existingPostLink}\n\nDo you want to post it again?`,
+        confirmRow,
+      ),
+    );
 
     try {
       const confirmation = await confirmMsg.awaitMessageComponent({
@@ -61,17 +62,14 @@ export class PostHandler {
       });
 
       if (confirmation.customId === "post_confirm_no") {
-        await confirmMsg.edit({ content: "⏭️ Skipped.", components: [] });
+        await confirmMsg.edit(editInfo("⏭️ Skipped."));
         return { confirmed: false, reason: "skipped" };
       }
 
-      await confirmMsg.edit({ content: "🔄 Posting again...", components: [] });
+      await confirmMsg.edit(editInfo("🔄 Posting again..."));
       return { confirmed: true };
     } catch {
-      await confirmMsg.edit({
-        content: "⏰ Confirmation timed out — skipping post.",
-        components: [],
-      }).catch(() => {});
+      await confirmMsg.edit(editInfo("⏰ Confirmation timed out — skipping post.")).catch(() => {});
       return { confirmed: false, reason: "timeout" };
     }
   }
@@ -81,13 +79,13 @@ export class PostHandler {
 
     const guildId = interaction.guildId;
     if (!guildId) {
-      await interaction.editReply("Must be used in a guild.");
+      await interaction.editReply(editError("Must be used in a guild."));
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.editReply(NOT_CONFIGURED_MSG);
+      await interaction.editReply(editError(NOT_CONFIGURED_MSG));
       return;
     }
 
@@ -96,13 +94,13 @@ export class PostHandler {
 
     const posts = findAllSnsLinks(postUrl);
     if (posts.length === 0) {
-      await interaction.editReply("❌ No valid social media links found.");
+      await interaction.editReply(editError("❌ No valid social media links found."));
       return;
     }
 
     const socialsChannel = await interaction.client.channels.fetch(config.socials_channel_id);
     if (!socialsChannel || !socialsChannel.isSendable()) {
-      await interaction.editReply("❌ Could not find the socials channel.");
+      await interaction.editReply(editError("❌ Could not find the socials channel."));
       return;
     }
 
@@ -122,7 +120,7 @@ export class PostHandler {
 
       const postData = (await snsService(posts, async () => {}).next()).value?.[0];
       if (!postData || !postData.postID) {
-        await interaction.editReply("❌ Could not fetch post content.");
+        await interaction.editReply(editError("❌ Could not fetch post content."));
         return;
       }
 
@@ -170,12 +168,14 @@ export class PostHandler {
         ? `\nhttps://discord.com/channels/${interaction.guildId}/${socialsChannel.id}/${result.messageIds[0]}`
         : "";
 
-      await interaction.editReply(`✅ Post sent to socials channel!${jumpLink}`);
+      await interaction.editReply(editSuccess(`✅ Post sent to socials channel!${jumpLink}`));
     } catch (err) {
       if (err instanceof MediaTooLargeError) {
         await interaction.editReply(
-          `❌ Media file is too large to upload to Discord (${(err.size / 1024 / 1024).toFixed(1)} MB).\n` +
-            `View the post directly: ${postUrl}`,
+          editError(
+            `❌ Media file is too large to upload to Discord (${(err.size / 1024 / 1024).toFixed(1)} MB).\n` +
+              `View the post directly: ${postUrl}`,
+          ),
         );
         return;
       }
@@ -183,7 +183,7 @@ export class PostHandler {
       const { requestBody: _body, ...safeErr } = (err as any) ?? {};
       log.error(safeErr, "/post command failed");
       try {
-        await interaction.editReply("❌ Something went wrong. Please try again.");
+        await interaction.editReply(editError("❌ Something went wrong. Please try again."));
       } catch {
         // editReply can fail if deferReply never completed
       }

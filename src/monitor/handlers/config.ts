@@ -7,6 +7,7 @@ import {
   type ModalSubmitInteraction,
   type RoleSelectMenuInteraction,
 } from "discord.js";
+import { ephemeralError } from "../view/ephemeral";
 import logger from "../../logger";
 import type { ConnectionType } from "../config";
 import { ConnectionTypeSchema } from "../config";
@@ -88,7 +89,7 @@ export class ConfigHandler {
 
   async handleSetupCommand(cmd: ChatInputCommandInteraction): Promise<void> {
     if (!cmd.guildId) {
-      await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
+      await cmd.reply({ ...ephemeralError("Must be used in a guild.") });
       return;
     }
 
@@ -110,10 +111,7 @@ export class ConfigHandler {
 
     collector.on("collect", async (interaction) => {
       if (interaction.user.id !== ownerId) {
-        await interaction.reply({
-          content: "Only the person who opened this panel can use it.",
-          flags: MessageFlags.Ephemeral,
-        });
+        await interaction.reply({ ...ephemeralError("Only the person who opened this panel can use it.") });
         return;
       }
 
@@ -129,10 +127,7 @@ export class ConfigHandler {
         log.error({ err, guildId }, "Error in setup panel collector");
         try {
           if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-              content: "Something went wrong. Please try again.",
-              flags: MessageFlags.Ephemeral,
-            });
+            await interaction.reply({ ...ephemeralError("Something went wrong. Please try again.") });
           }
         } catch { /* ignore */ }
       }
@@ -162,7 +157,7 @@ export class ConfigHandler {
     if (customId === SETUP_NAV_CONNECTIONS) {
       const config = this.repo.getConfig(guildId);
       if (!config) {
-        await interaction.reply({ content: "Save settings first.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ ...ephemeralError("Save settings first.") });
         return;
       }
       await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
@@ -179,7 +174,7 @@ export class ConfigHandler {
     if (customId === SETUP_TEMPLATE_BTN) {
       const config = this.repo.getConfig(guildId);
       if (!config) {
-        await interaction.reply({ content: "Save settings first.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ ...ephemeralError("Save settings first.") });
         return;
       }
       await interaction.showModal(buildTemplateModal(config));
@@ -207,14 +202,14 @@ export class ConfigHandler {
   ): Promise<void> {
     const colonIdx = connectionId.indexOf(":");
     if (colonIdx === -1) {
-      await interaction.reply({ content: "Invalid connection ID.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Invalid connection ID.") });
       return;
     }
     const rawType = connectionId.slice(0, colonIdx);
     const handle = connectionId.slice(colonIdx + 1);
     const typeParsed = ConnectionTypeSchema.safeParse(rawType);
     if (!typeParsed.success) {
-      await interaction.reply({ content: "Invalid connection type.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Invalid connection type.") });
       return;
     }
     const type: ConnectionType = typeParsed.data;
@@ -223,13 +218,13 @@ export class ConfigHandler {
       this.repo.removeMonitor(guildId, type, handle);
     } catch (err) {
       log.error({ err, guildId, connectionId }, "Failed to remove monitor connection");
-      await interaction.reply({ content: "Failed to remove connection.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Failed to remove connection.") });
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.reply({ content: "Config not found.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Config not found.") });
       return;
     }
 
@@ -341,10 +336,7 @@ export class ConfigHandler {
 
     const rawFormat = interaction.fields.getTextInputValue("format").trim().toLowerCase();
     if (rawFormat !== "inline" && rawFormat !== "links") {
-      await interaction.reply({
-        content: `Invalid format \`${rawFormat}\`. Must be \`inline\` or \`links\`.`,
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.reply({ ...ephemeralError(`Invalid format \`${rawFormat}\`. Must be \`inline\` or \`links\`.`) });
       return;
     }
 
@@ -354,7 +346,7 @@ export class ConfigHandler {
       this.repo.upsertTemplate(guildId, rawFormat, template);
     } catch (err) {
       log.error({ err, guildId }, "Failed to save template");
-      await interaction.reply({ content: "Failed to save template.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Failed to save template.") });
       return;
     }
 
@@ -366,7 +358,7 @@ export class ConfigHandler {
       await interaction.reply({
         content: `✅ Template saved. Format: \`${rawFormat}\``,
         flags: MessageFlags.Ephemeral,
-      });
+      }); // rare fallback path — not a V2 message
     }
   }
 
@@ -379,8 +371,9 @@ export class ConfigHandler {
 
     if (!parsed) {
       await interaction.reply({
-        content: `Could not detect platform from that URL.\nSupported: \`instagram.com\`, \`tiktok.com\`, \`twitter.com\`, \`x.com\``,
-        flags: MessageFlags.Ephemeral,
+        ...ephemeralError(
+          `Could not detect platform from that URL.\nSupported: \`instagram.com\`, \`tiktok.com\`, \`twitter.com\`, \`x.com\``,
+        ),
       });
       return;
     }
@@ -389,13 +382,13 @@ export class ConfigHandler {
       this.repo.addMonitor(guildId, { type: parsed.type, handle: parsed.handle, cooldown_seconds: ConfigHandler.DEFAULT_COOLDOWN_SECONDS });
     } catch (err) {
       log.error({ err, guildId, ...parsed }, "Failed to add monitor connection");
-      await interaction.reply({ content: "Failed to add connection.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Failed to add connection.") });
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.reply({ content: "Config not found.", flags: MessageFlags.Ephemeral });
+      await interaction.reply({ ...ephemeralError("Config not found.") });
       return;
     }
 

@@ -98,7 +98,7 @@ export function buildSettingsPage(
   } else {
     header += `\n📡 **Panel channel:** <#${eff.panel_channel_id}>`;
     header += `\n📢 **Socials channel:** <#${eff.socials_channel_id}>`;
-    header += `\n🔒 **Trigger role:** ${eff.trigger_role_id ? `<@&${eff.trigger_role_id}>` : "_Anyone_"}`;
+    header += `\n🔒 **Allowed role:** ${eff.trigger_role_id ? `<@&${eff.trigger_role_id}>` : "_Anyone_"}`;
     header += `\n📋 **Log channel:** ${eff.log_channel_id ? `<#${eff.log_channel_id}>` : "_None_"}`;
     header += `\n📝 **Post format:** \`${eff.format}\``;
     const tmpl = eff.template;
@@ -148,7 +148,7 @@ export function buildSettingsPage(
   const triggerRoleSelect = new RoleSelectMenuBuilder()
     .setCustomId(SETUP_TRIGGER_ROLE_SELECT)
     .setDefaultRoles(eff.trigger_role_id ? [eff.trigger_role_id] : [])
-    .setPlaceholder("Trigger role — leave empty to allow anyone to poll")
+    .setPlaceholder("Allowed role — leave empty to allow anyone to poll")
     .setMinValues(0)
     .setMaxValues(1)
     .setDisabled(disabled);

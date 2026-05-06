@@ -1,5 +1,4 @@
 import {
-  MessageFlags,
   PermissionFlagsBits,
   type ChatInputCommandInteraction,
   type Interaction,
@@ -19,19 +18,17 @@ import type { ReviewHandler } from "./handlers/review";
 import type { PostHandler } from "./handlers/post";
 import type { ConfigHandler } from "./handlers/config";
 import { SETUP_TEMPLATE_MODAL, SETUP_CONNECTION_ADD_MODAL } from "./view/setup";
+import { ephemeralError } from "./view/ephemeral";
 
 const log = logger.child({ module: "monitor/interactions" });
 
 async function requireGuildAndPermission(cmd: ChatInputCommandInteraction): Promise<boolean> {
   if (!cmd.guildId) {
-    await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
+    await cmd.reply({ ...ephemeralError("Must be used in a guild.") });
     return false;
   }
   if (!cmd.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-    await cmd.reply({
-      content: "You need Manage Guild permission to use this command.",
-      flags: MessageFlags.Ephemeral,
-    });
+    await cmd.reply({ ...ephemeralError("You need Manage Guild permission to use this command.") });
     return false;
   }
   return true;
@@ -88,9 +85,9 @@ export class InteractionDispatcher {
       try {
         if (interaction.isRepliable() && !interaction.replied) {
           if (!interaction.deferred) {
-            await interaction.reply({ content: "An error occurred. Please try again.", flags: MessageFlags.Ephemeral });
+            await interaction.reply({ ...ephemeralError("An error occurred. Please try again.") });
           } else {
-            await interaction.followUp({ content: "An error occurred. Please try again.", flags: MessageFlags.Ephemeral });
+            await interaction.followUp({ ...ephemeralError("An error occurred. Please try again.") });
           }
         }
       } catch {
@@ -128,7 +125,7 @@ export class InteractionDispatcher {
         break;
       default:
         log.warn({ commandName: cmd.commandName }, "Unrecognized command received by monitor handler");
-        await cmd.reply({ content: "Unknown command.", flags: MessageFlags.Ephemeral });
+        await cmd.reply({ ...ephemeralError("Unknown command.") });
     }
   }
 
@@ -149,6 +146,6 @@ export class InteractionDispatcher {
     }
 
     log.warn({ group, sub }, "Unrecognized monitor subcommand");
-    await cmd.reply({ content: "Unknown subcommand.", flags: MessageFlags.Ephemeral });
+    await cmd.reply({ ...ephemeralError("Unknown subcommand.") });
   }
 }

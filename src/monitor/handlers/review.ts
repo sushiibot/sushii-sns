@@ -20,6 +20,7 @@ import {
   type ReviewState,
 } from "../service/review/types";
 import type { ReviewStore } from "../service/review/store";
+import { ephemeralError } from "../view/ephemeral";
 
 const log = logger.child({ module: "monitor/handlers/review" });
 
@@ -94,7 +95,7 @@ export class ReviewHandler {
     const state = this.reviewStore.get(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
-      await interaction.reply({ content: "This review has expired.", flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError("This review has expired."));
       return;
     }
 
@@ -127,7 +128,7 @@ export class ReviewHandler {
     const state = this.reviewStore.get(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
-      await interaction.reply({ content: "This review has expired.", flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError("This review has expired."));
       return;
     }
 
@@ -167,7 +168,7 @@ export class ReviewHandler {
     const state = this.reviewStore.get(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
-      await interaction.reply({ content: "This review has expired.", flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError("This review has expired."));
       return;
     }
 
@@ -181,10 +182,7 @@ export class ReviewHandler {
     );
 
     if (filteredFiles.length === 0 && !TEXT_ONLY_PLATFORMS.has(state.postData.postLink.metadata.platform)) {
-      await interaction.reply({
-        content: "No images selected. Re-add images before posting.",
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.reply(ephemeralError("No images selected. Re-add images before posting."));
       return;
     }
 
@@ -197,7 +195,7 @@ export class ReviewHandler {
 
     const reviewChannel = interaction.channel;
     if (!reviewChannel || !reviewChannel.isTextBased()) {
-      await interaction.followUp({ content: "Cannot find the review channel.", flags: MessageFlags.Ephemeral });
+      await interaction.followUp(ephemeralError("Cannot find the review channel."));
       return;
     }
 
@@ -228,7 +226,7 @@ export class ReviewHandler {
     const state = this.reviewStore.get(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
-      await interaction.reply({ content: "This review has expired.", flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError("This review has expired."));
       return;
     }
 

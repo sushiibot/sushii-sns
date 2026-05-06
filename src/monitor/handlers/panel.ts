@@ -20,6 +20,7 @@ import { syncAllMonitorConnections, fetchConnectionPosts, downloadFilesFromUrls 
 import { sendMonitorLog } from "../log_channel";
 import type { ReviewState } from "../service/review/types";
 import type { ReviewStore } from "../service/review/store";
+import { ephemeralError, ephemeralWarn, editError, editSuccess, editInfo } from "../view/ephemeral";
 
 const log = logger.child({ module: "monitor/handlers/panel" });
 
@@ -56,30 +57,24 @@ export class PanelHandler {
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.reply({ content: PanelHandler.NOT_CONFIGURED_MSG, flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError(PanelHandler.NOT_CONFIGURED_MSG));
       return;
     }
 
     if (interaction.channelId !== config.panel_channel_id) {
-      await interaction.reply({
-        content: "This button is only valid in the panel channel.",
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.reply(ephemeralError("This button is only valid in the panel channel."));
       return;
     }
 
     if (this.activeFetches.has(connectionId)) {
-      await interaction.reply({
-        content: "A fetch for this connection is already in progress.",
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.reply(ephemeralWarn("A fetch for this connection is already in progress."));
       return;
     }
 
     if (config.trigger_role_id) {
       const member = interaction.member;
       if (!member) {
-        await interaction.reply({ content: "Could not verify your roles.", flags: MessageFlags.Ephemeral });
+        await interaction.reply(ephemeralError("Could not verify your roles."));
         return;
       }
 
@@ -88,17 +83,14 @@ export class PanelHandler {
           ? member.roles.cache.has(config.trigger_role_id)
           : Array.isArray(member.roles) && member.roles.includes(config.trigger_role_id);
       if (!hasRole) {
-        await interaction.reply({
-          content: "You don't have the required role to poll.",
-          flags: MessageFlags.Ephemeral,
-        });
+        await interaction.reply(ephemeralError("You don't have the required role to poll."));
         return;
       }
     }
 
     const connection = findConnectionById(config, connectionId);
     if (!connection) {
-      await interaction.reply({ content: "Unknown connection.", flags: MessageFlags.Ephemeral });
+      await interaction.reply(ephemeralError("Unknown connection."));
       return;
     }
 
@@ -107,10 +99,7 @@ export class PanelHandler {
       const nextPollAt = lastFetch.last_fetched_at + connection.cooldown_seconds * 1000;
       if (Date.now() < nextPollAt) {
         const nextPollSec = Math.floor(nextPollAt / 1000);
-        await interaction.reply({
-          content: `On cooldown. Next poll available <t:${nextPollSec}:R>.`,
-          flags: MessageFlags.Ephemeral,
-        });
+        await interaction.reply(ephemeralWarn(`On cooldown. Next poll available <t:${nextPollSec}:R>.`));
         return;
       }
     }
@@ -204,13 +193,13 @@ export class PanelHandler {
 
     const guildId = cmd.guildId;
     if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
+      await cmd.editReply(editError("Must be used in a guild."));
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await cmd.editReply({ content: PanelHandler.NOT_CONFIGURED_MSG });
+      await cmd.editReply(editError(PanelHandler.NOT_CONFIGURED_MSG));
       return;
     }
 
@@ -226,12 +215,10 @@ export class PanelHandler {
       });
       await this.refreshPanelEmbed(guildId, config);
       await sendMonitorLog(this.client, config.log_channel_id, `/fetch-all completed by ${cmd.user.username}`);
-      await cmd.editReply({
-        content: "Finished polling all connections (items marked as seen). Monitor panel updated.",
-      });
+      await cmd.editReply(editSuccess("Finished polling all connections (items marked as seen). Monitor panel updated."));
     } catch (err) {
       log.error(err, "/fetch-all failed");
-      await cmd.editReply({ content: "Something went wrong while syncing." });
+      await cmd.editReply(editError("Something went wrong while syncing."));
     } finally {
       for (const id of idsToLock) this.activeFetches.delete(id);
     }
@@ -242,18 +229,18 @@ export class PanelHandler {
 
     const guildId = cmd.guildId;
     if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
+      await cmd.editReply(editError("Must be used in a guild."));
       return;
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await cmd.editReply({ content: PanelHandler.NOT_CONFIGURED_MSG });
+      await cmd.editReply(editError(PanelHandler.NOT_CONFIGURED_MSG));
       return;
     }
 
     await this.ensurePanelSent(guildId, config);
-    await cmd.editReply({ content: "Panel refreshed." });
+    await cmd.editReply(editSuccess("Panel refreshed."));
   }
 
   private buildPanelConnectionsMeta(guildId: string, config: MonitorsConfig): PanelConnectionMeta[] {
@@ -276,11 +263,11 @@ export class PanelHandler {
   ): Promise<void> {
     const connection = findConnectionById(config, connectionId);
     if (!connection) {
-      await interaction.editReply({ content: "Unknown connection." });
+      await interaction.editReply(editError("Unknown connection."));
       return;
     }
 
-    await interaction.editReply("Fetching latest posts...");
+    await interaction.editReply(editInfo("Fetching latest posts..."));
 
     let posts: PostData<AnySnsMetadata>[] = [];
     try {
@@ -292,19 +279,19 @@ export class PanelHandler {
       });
     } catch (err) {
       log.error({ err, connectionId }, "Failed to fetch connection posts");
-      await interaction.editReply("Failed to fetch posts. Please try again.");
+      await interaction.editReply(editError("Failed to fetch posts. Please try again."));
       return;
     }
 
     if (posts.length === 0) {
       this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
-      await interaction.editReply("No new posts found.");
+      await interaction.editReply(editInfo("No new posts found."));
       return;
     }
 
     const reviewChannel = interaction.channel;
     if (!reviewChannel || !reviewChannel.isSendable()) {
-      await interaction.editReply("Cannot send review messages in this channel.");
+      await interaction.editReply(editError("Cannot send review messages in this channel."));
       return;
     }
 
@@ -376,11 +363,11 @@ export class PanelHandler {
     if (connection.type === "instagram") {
       const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);
       await interaction.editReply(
-        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}). Review messages created below.`,
+        editSuccess(`Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}). Review messages created below.`),
       );
     } else {
       await interaction.editReply(
-        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"}. Review messages created below.`,
+        editSuccess(`Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"}. Review messages created below.`),
       );
     }
   }
