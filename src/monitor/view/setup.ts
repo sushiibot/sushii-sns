@@ -301,9 +301,9 @@ export function buildTemplateModal(config: MonitorsConfig, nonce: string): Modal
 
   const templateInput = new TextInputBuilder()
     .setCustomId("template")
-    .setLabel("Post text template (leave blank for none)")
+    .setLabel("Post text template (leave blank for default)")
     .setStyle(TextInputStyle.Paragraph)
-    .setValue(config.template)
+    .setValue(config.storedTemplate)
     .setRequired(false)
     .setMaxLength(2000);
 

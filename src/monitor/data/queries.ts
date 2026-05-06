@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import logger from "../../logger";
-import type { Connection, ConnectionType, MonitorsConfig } from "../config";
+import { MonitorsConfig, type Connection, type ConnectionType } from "../config";
 import { METADATA_MIGRATIONS } from "./schema";
 
 const log = logger.child({ module: "monitor/db" });
@@ -98,7 +98,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     profile_name: r.profile_name ?? null,
   }));
 
-  return {
+  return new MonitorsConfig({
     panel_channel_id: settings.panel_channel_id,
     panel_message_id: settings.panel_message_id ?? null,
     socials_channel_id: settings.socials_channel_id,
@@ -107,7 +107,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     format: settings.format as "links" | "inline",
     template: settings.template,
     connections,
-  };
+  });
 }
 
 export type GuildChannelSettings = Pick<
