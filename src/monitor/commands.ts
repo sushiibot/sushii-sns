@@ -62,5 +62,6 @@ export async function registerSlashCommands(
     log.info("Slash commands registered");
   } catch (err) {
     log.error(err, "Failed to register slash commands");
+    throw err;
   }
 }

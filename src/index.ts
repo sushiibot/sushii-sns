@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     await MessageCreateHandler(message, serverConfig);
   });
 
-  // Always register commands — all slash commands (usage, monitor, post, fetch-all)
+  // Always register commands — all slash commands (monitor, post, fetch-all)
   // are defined globally regardless of whether the monitor feature is enabled.
   await registerSlashCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
 
