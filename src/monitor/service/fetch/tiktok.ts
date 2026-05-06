@@ -261,6 +261,49 @@ async function hydrateTiktokVideoApi6(
   };
 }
 
+/**
+ * Seed: list current feed items, mark all as seen, return count + display name.
+ * No media downloaded.
+ */
+export async function seedTiktokFeed(
+  handle: string,
+  isPostSeen: (id: string) => boolean,
+  markPostSeen: (id: string) => void,
+): Promise<{ count: number; profileName: string | null }> {
+  // Try BestExperience, fall back to Api6
+  try {
+    const json = await fetchTiktokBestExperienceJson(handle);
+    const awemeList: any[] = Array.isArray(json?.data?.aweme_list) ? json.data.aweme_list : [];
+    if (awemeList.length === 0 || json?.status !== "ok") throw new Error("empty BestExperience response");
+
+    const profileName: string | null =
+      (typeof awemeList[0]?.author?.nickname === "string" && awemeList[0].author.nickname)
+        ? awemeList[0].author.nickname
+        : null;
+    const unseen = awemeList.filter((a) => {
+      const id = String(a?.aweme_id ?? "");
+      return id && !isPostSeen(id);
+    });
+    for (const a of unseen) {
+      const id = String(a?.aweme_id ?? "");
+      if (id) markPostSeen(id);
+    }
+    return { count: unseen.length, profileName };
+  } catch {
+    const json = await fetchTiktokApi6Json(handle);
+    const videoList: any[] = Array.isArray(json?.videos) ? json.videos : [];
+    const unseen = videoList.filter((v) => {
+      const id = String(v?.video_id ?? "");
+      return id && !isPostSeen(id);
+    });
+    for (const v of unseen) {
+      const id = String(v?.video_id ?? "");
+      if (id) markPostSeen(id);
+    }
+    return { count: unseen.length, profileName: null };
+  }
+}
+
 export async function fetchTiktokFeed(
   handle: string,
   downloadFilesFromUrls: DownloadFilesFromUrls,

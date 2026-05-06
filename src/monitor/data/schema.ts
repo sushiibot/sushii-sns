@@ -5,6 +5,7 @@
 export const METADATA_MIGRATIONS: string[][] = [
   // Migration 0 — multi-guild schema
   [
+
     `CREATE TABLE IF NOT EXISTS guild_settings (
       guild_id TEXT NOT NULL PRIMARY KEY,
       panel_channel_id TEXT NOT NULL,
@@ -37,5 +38,10 @@ export const METADATA_MIGRATIONS: string[][] = [
       PRIMARY KEY (guild_id, type, handle, post_id),
       FOREIGN KEY (guild_id, type, handle) REFERENCES monitors(guild_id, type, handle) ON DELETE CASCADE
     )`,
+  ],
+
+  // Migration 1 — profile display name cache
+  [
+    `ALTER TABLE monitors ADD COLUMN profile_name TEXT`,
   ],
 ];

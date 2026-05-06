@@ -113,6 +113,30 @@ async function hydrateTwitterTimelineItem(
   };
 }
 
+/**
+ * Seed: list current timeline items, mark all as seen, return count + display name.
+ * No media downloaded.
+ */
+export async function seedTwitterFeed(
+  handle: string,
+  isPostSeen: (id: string) => boolean,
+  markPostSeen: (id: string) => void,
+): Promise<{ count: number; profileName: string | null }> {
+  const json = await fetchTwitterTimelineJson(handle);
+  const items: any[] = Array.isArray(json?.timeline) ? json.timeline : [];
+  const profileName: string | null = (typeof json?.user?.name === "string" && json.user.name) ? json.user.name : null;
+
+  const unseen = items.filter((item) => {
+    const id = String(item?.tweet_id ?? "");
+    return id && !isPostSeen(id);
+  });
+  for (const item of unseen) {
+    const id = String(item?.tweet_id ?? "");
+    if (id) markPostSeen(id);
+  }
+  return { count: unseen.length, profileName };
+}
+
 export async function fetchTwitterFeedRapidApi(
   handle: string,
   downloadFilesFromUrls: DownloadFilesFromUrls,

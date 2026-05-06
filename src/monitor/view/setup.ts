@@ -227,12 +227,17 @@ export function buildConnectionsPage(
     const connId = getConnectionId(conn);
     const emoji =
       conn.type === "instagram" ? "📸" : conn.type === "tiktok" ? "🎵" : "🐦";
+    const platformLabel =
+      conn.type === "instagram" ? "Instagram" : conn.type === "tiktok" ? "TikTok" : "Twitter/X";
+
+    let label = `${emoji} **${platformLabel}** · @${conn.handle}`;
+    if (conn.profile_name) label += ` · ${conn.profile_name}`;
 
     container.addSeparatorComponents(
       new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small),
     );
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`${emoji} \`${connId}\``),
+      new TextDisplayBuilder().setContent(label),
     );
 
     const removeBtn = new ButtonBuilder()

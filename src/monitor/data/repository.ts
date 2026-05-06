@@ -13,6 +13,7 @@ import {
   purgeConnectionMeta,
   purgeConnectionSeenPosts,
   removeMonitor,
+  setConnectionProfileName,
   updatePanelMessage,
   upsertConnectionMeta,
   upsertGuildSettings,
@@ -37,6 +38,7 @@ export interface MonitorRepository extends PostTrackingSink {
   updatePanelMessage(guildId: string, messageId: string): void;
   addMonitor(guildId: string, connection: Connection): void;
   removeMonitor(guildId: string, type: string, handle: string): void;
+  setProfileName(guildId: string, connectionId: string, profileName: string | null): void;
 
   // Fetch state
   getConnectionMeta(guildId: string, connectionId: string): LastFetch | null;
@@ -75,6 +77,9 @@ export function createMonitorRepository(db: Database): MonitorRepository {
     },
     removeMonitor(guildId, type, handle) {
       removeMonitor(db, guildId, type, handle);
+    },
+    setProfileName(guildId, connectionId, profileName) {
+      setConnectionProfileName(db, guildId, connectionId, profileName);
     },
 
     getConnectionMeta(guildId, connectionId) {

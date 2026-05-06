@@ -7,10 +7,10 @@ import {
   type ModalSubmitInteraction,
   type RoleSelectMenuInteraction,
 } from "discord.js";
-import { ephemeralError } from "../view/ephemeral";
+import { editError, ephemeralError } from "../view/ephemeral";
 import logger from "../../logger";
-import type { ConnectionType } from "../config";
-import { ConnectionTypeSchema } from "../config";
+import type { Connection, ConnectionType } from "../config";
+import { ConnectionTypeSchema, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import type { GuildChannelSettings } from "../data/queries";
 import {
@@ -378,28 +378,78 @@ export class ConfigHandler {
       return;
     }
 
+    // Defer early — initial seed fetch can take a few seconds
+    const fromMessage = interaction.isFromMessage();
+    if (fromMessage) {
+      await interaction.deferUpdate();
+    } else {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
+
+    const newConnection: Connection = {
+      type: parsed.type,
+      handle: parsed.handle,
+      cooldown_seconds: ConfigHandler.DEFAULT_COOLDOWN_SECONDS,
+    };
+
+    // Save first (posts table FK requires monitors row to exist)
     try {
-      this.repo.addMonitor(guildId, { type: parsed.type, handle: parsed.handle, cooldown_seconds: ConfigHandler.DEFAULT_COOLDOWN_SECONDS });
+      this.repo.addMonitor(guildId, newConnection);
     } catch (err) {
       log.error({ err, guildId, ...parsed }, "Failed to add monitor connection");
-      await interaction.reply({ ...ephemeralError("Failed to add connection.") });
+      if (fromMessage) {
+        await interaction.followUp({ ...ephemeralError("Failed to add connection.") });
+      } else {
+        await interaction.editReply(editError("Failed to add connection."));
+      }
       return;
+    }
+
+    // Seed: validate the account exists and mark existing posts as seen.
+    // If the API call fails (bad handle, private account, etc.), roll back.
+    let seed: { count: number; profileName: string | null };
+    try {
+      seed = await this.panelHandler.seedNewConnection(guildId, newConnection, interaction.user.username);
+    } catch (err) {
+      log.warn({ err, guildId, ...parsed }, "Seed failed for new connection — rolling back");
+      try { this.repo.removeMonitor(guildId, parsed.type, parsed.handle); } catch { /* ignore */ }
+      const msg = "Could not fetch posts for that account. Check the URL and try again.";
+      if (fromMessage) {
+        await interaction.followUp({ ...ephemeralError(msg) });
+      } else {
+        await interaction.editReply(editError(msg));
+      }
+      return;
+    }
+
+    // Persist profile name if the platform returned one
+    if (seed.profileName) {
+      this.repo.setProfileName(guildId, getConnectionId(newConnection), seed.profileName);
     }
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.reply({ ...ephemeralError("Config not found.") });
+      if (fromMessage) {
+        await interaction.followUp({ ...ephemeralError("Config not found.") });
+      } else {
+        await interaction.editReply(editError("Config not found."));
+      }
       return;
     }
 
     await this.panelHandler.refreshPanelEmbed(guildId, config);
 
-    if (interaction.isFromMessage()) {
-      await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
-    } else {
-      await interaction.reply({
-        content: `✅ Added \`${parsed.type}:${parsed.handle}\`.`,
+    const seedSummary = `Found **${seed.count}** existing post${seed.count === 1 ? "" : "s"} — all marked as seen.`;
+
+    if (fromMessage) {
+      await interaction.editReply(pageToUpdateOptions(buildConnectionsPage(config)));
+      await interaction.followUp({
+        content: `✅ Added \`${parsed.type}:${parsed.handle}\`. ${seedSummary}`,
         flags: MessageFlags.Ephemeral,
+      });
+    } else {
+      await interaction.editReply({
+        content: `✅ Added \`${parsed.type}:${parsed.handle}\`. ${seedSummary}`,
       });
     }
   }

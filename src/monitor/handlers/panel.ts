@@ -11,12 +11,13 @@ import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
 import { buildInlineFormatContent } from "../../utils/template";
-import type { MonitorsConfig } from "../config";
+import type { Connection, MonitorsConfig } from "../config";
 import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
 import { batchToMessageOptions, buildReviewBatches } from "../view/review";
 import { syncAllMonitorConnections, fetchConnectionPosts, downloadFilesFromUrls } from "../service/fetch";
+import { seedConnection, type SeedResult } from "../service/seed";
 import { sendMonitorLog } from "../log_channel";
 import type { ReviewState } from "../service/review/types";
 import type { ReviewStore } from "../service/review/store";
@@ -241,6 +242,28 @@ export class PanelHandler {
 
     await this.ensurePanelSent(guildId, config);
     await cmd.editReply(editSuccess("Panel refreshed."));
+  }
+
+  /**
+   * Fetches the current feed for a newly-added connection, marks all items as seen,
+   * and returns the count + profile display name.
+   *
+   * Throws if the platform API call fails (invalid account, network error, etc.).
+   * Callers are responsible for catching and rolling back addMonitor if needed.
+   */
+  async seedNewConnection(
+    guildId: string,
+    connection: Connection,
+    username: string,
+  ): Promise<SeedResult> {
+    const connectionId = getConnectionId(connection);
+    const result = await seedConnection(
+      connection,
+      (id) => this.repo.isPostSeen(guildId, connectionId, id),
+      (id) => this.repo.markPostSeen(guildId, connectionId, id),
+    );
+    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), username);
+    return result;
   }
 
   private buildPanelConnectionsMeta(guildId: string, config: MonitorsConfig): PanelConnectionMeta[] {

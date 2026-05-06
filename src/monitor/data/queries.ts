@@ -70,6 +70,7 @@ type MonitorRow = {
   type: string;
   handle: string;
   cooldown_seconds: number;
+  profile_name: string | null;
 };
 
 export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig | null {
@@ -85,7 +86,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
 
   const rows = db
     .query<MonitorRow, [string]>(
-      `SELECT type, handle, cooldown_seconds
+      `SELECT type, handle, cooldown_seconds, profile_name
        FROM monitors WHERE guild_id = ? ORDER BY type, handle`,
     )
     .all(guildId);
@@ -94,6 +95,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     type: r.type as ConnectionType,
     handle: r.handle,
     cooldown_seconds: r.cooldown_seconds,
+    profile_name: r.profile_name ?? null,
   }));
 
   return {
@@ -155,11 +157,25 @@ export function updatePanelMessage(db: Database, guildId: string, messageId: str
 
 export function addMonitor(db: Database, guildId: string, connection: Connection): void {
   db.query(
-    `INSERT INTO monitors (guild_id, type, handle, cooldown_seconds)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO monitors (guild_id, type, handle, cooldown_seconds, profile_name)
+     VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(guild_id, type, handle) DO UPDATE SET
        cooldown_seconds = excluded.cooldown_seconds`,
-  ).run(guildId, connection.type, connection.handle, connection.cooldown_seconds);
+  ).run(guildId, connection.type, connection.handle, connection.cooldown_seconds, connection.profile_name ?? null);
+}
+
+export function setConnectionProfileName(
+  db: Database,
+  guildId: string,
+  connectionId: string,
+  profileName: string | null,
+): void {
+  const parts = splitConnectionId(connectionId);
+  if (!parts) return;
+
+  db.query(
+    `UPDATE monitors SET profile_name = ? WHERE guild_id = ? AND type = ? AND handle = ?`,
+  ).run(profileName, guildId, parts.type, parts.handle);
 }
 
 export function removeMonitor(db: Database, guildId: string, type: string, handle: string): void {

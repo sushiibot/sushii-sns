@@ -310,6 +310,23 @@ async function fetchIgProfilePosts(
   ]);
 }
 
+/**
+ * Seed: list current profile posts, mark all as seen, return count.
+ * No media downloaded. Profile name not available from this API — returns null.
+ */
+export async function seedIgProfileFeed(
+  handle: string,
+  isPostSeen: (id: string) => boolean,
+  markPostSeen: (id: string) => void,
+): Promise<{ count: number; profileName: string | null }> {
+  const nodes = await listIgProfilePostsViaRapidApi120(handle);
+  const unseen = nodes.filter((n) => !isPostSeen(n.shortcode));
+  for (const n of unseen) {
+    markPostSeen(n.shortcode);
+  }
+  return { count: unseen.length, profileName: null };
+}
+
 export async function fetchInstagramConnectionPosts(
   igUsername: string,
   downloadFilesFromUrls: DownloadFilesFromUrls,
