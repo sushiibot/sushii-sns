@@ -177,12 +177,12 @@ export class ConfigHandler {
         await interaction.reply({ ...ephemeralError("Save settings first.") });
         return;
       }
-      await interaction.showModal(buildTemplateModal(config));
+      await interaction.showModal(buildTemplateModal(config, interaction.id));
       return;
     }
 
     if (customId === SETUP_ADD_CONNECTION_BTN) {
-      await interaction.showModal(buildConnectionAddModal());
+      await interaction.showModal(buildConnectionAddModal(interaction.id));
       return;
     }
 
@@ -334,7 +334,7 @@ export class ConfigHandler {
     const guildId = interaction.guildId;
     if (!guildId) return;
 
-    const rawFormat = interaction.fields.getTextInputValue("format").trim().toLowerCase();
+    const [rawFormat] = interaction.fields.getStringSelectValues("format");
     if (rawFormat !== "inline" && rawFormat !== "links") {
       await interaction.reply({ ...ephemeralError(`Invalid format \`${rawFormat}\`. Must be \`inline\` or \`links\`.`) });
       return;

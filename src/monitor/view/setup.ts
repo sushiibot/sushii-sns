@@ -10,6 +10,8 @@ import {
   RoleSelectMenuBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   TextDisplayBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -274,14 +276,22 @@ export function buildConnectionsPage(
 // Modal builders
 // ---------------------------------------------------------------------------
 
-export function buildTemplateModal(config: MonitorsConfig): ModalBuilder {
-  const formatInput = new TextInputBuilder()
+export function buildTemplateModal(config: MonitorsConfig, nonce: string): ModalBuilder {
+  const formatSelect = new StringSelectMenuBuilder()
     .setCustomId("format")
-    .setLabel("Post format (inline or links)")
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder("inline  or  links")
-    .setValue(config.format)
-    .setRequired(true);
+    .setPlaceholder("Select post format")
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Inline")
+        .setValue("inline")
+        .setDescription("Embed media directly in the message")
+        .setDefault(config.format === "inline"),
+      new StringSelectMenuOptionBuilder()
+        .setLabel("Links")
+        .setValue("links")
+        .setDescription("Post the original URLs only")
+        .setDefault(config.format === "links"),
+    );
 
   const templateInput = new TextInputBuilder()
     .setCustomId("template")
@@ -292,15 +302,16 @@ export function buildTemplateModal(config: MonitorsConfig): ModalBuilder {
     .setMaxLength(2000);
 
   return new ModalBuilder()
-    .setCustomId(SETUP_TEMPLATE_MODAL)
+    .setCustomId(`${SETUP_TEMPLATE_MODAL}:${nonce}`)
     .setTitle("Post Format & Template")
     .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(formatInput),
+      // Cast needed: discord.js types haven't been updated for modal select menus yet
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(formatSelect) as unknown as ActionRowBuilder<TextInputBuilder>,
       new ActionRowBuilder<TextInputBuilder>().addComponents(templateInput),
     );
 }
 
-export function buildConnectionAddModal(): ModalBuilder {
+export function buildConnectionAddModal(nonce: string): ModalBuilder {
   const urlInput = new TextInputBuilder()
     .setCustomId("url")
     .setLabel("Profile URL")
@@ -310,7 +321,7 @@ export function buildConnectionAddModal(): ModalBuilder {
     .setMaxLength(500);
 
   return new ModalBuilder()
-    .setCustomId(SETUP_CONNECTION_ADD_MODAL)
+    .setCustomId(`${SETUP_CONNECTION_ADD_MODAL}:${nonce}`)
     .setTitle("Add Monitor Connection")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),

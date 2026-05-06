@@ -66,9 +66,9 @@ export class InteractionDispatcher {
           await this.reviewHandler.handlePost(interaction, customId.slice(REVIEW_POST_PREFIX.length));
         } else if (customId.startsWith(REVIEW_SKIP_PREFIX)) {
           await this.reviewHandler.handleSkip(interaction, customId.slice(REVIEW_SKIP_PREFIX.length));
-        } else {
-          // Setup panel buttons are handled by their per-message collector.
-          // If the collector has expired (5-min timeout), acknowledge to avoid "interaction failed".
+        } else if (!customId.startsWith("monitor:setup")) {
+          // Setup panel buttons are handled by their per-message collector — don't touch them here.
+          // For any other unrecognised button, acknowledge to avoid "interaction failed".
           await interaction.deferUpdate();
         }
       } else if (interaction.isStringSelectMenu()) {
@@ -99,9 +99,9 @@ export class InteractionDispatcher {
   private async handleModal(interaction: ModalSubmitInteraction): Promise<void> {
     const { customId } = interaction;
 
-    if (customId === SETUP_TEMPLATE_MODAL) {
+    if (customId.startsWith(SETUP_TEMPLATE_MODAL)) {
       await this.configHandler.handleTemplateModalSubmit(interaction);
-    } else if (customId === SETUP_CONNECTION_ADD_MODAL) {
+    } else if (customId.startsWith(SETUP_CONNECTION_ADD_MODAL)) {
       await this.configHandler.handleConnectionAddModalSubmit(interaction);
     } else if (customId.startsWith(REVIEW_MODAL_PREFIX)) {
       await this.reviewHandler.handleModalSubmit(interaction, customId.slice(REVIEW_MODAL_PREFIX.length));
