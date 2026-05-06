@@ -5,6 +5,7 @@ import {
   ChannelSelectMenuBuilder,
   ChannelType,
   ContainerBuilder,
+  LabelBuilder,
   MessageFlags,
   ModalBuilder,
   RoleSelectMenuBuilder,
@@ -310,8 +311,9 @@ export function buildTemplateModal(config: MonitorsConfig, nonce: string): Modal
     .setCustomId(`${SETUP_TEMPLATE_MODAL}:${nonce}`)
     .setTitle("Post Format & Template")
     .addComponents(
-      // Cast needed: discord.js types haven't been updated for modal select menus yet
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(formatSelect) as unknown as ActionRowBuilder<TextInputBuilder>,
+      new LabelBuilder()
+        .setLabel("Post format")
+        .setStringSelectMenuComponent(formatSelect),
       new ActionRowBuilder<TextInputBuilder>().addComponents(templateInput),
     );
 }
