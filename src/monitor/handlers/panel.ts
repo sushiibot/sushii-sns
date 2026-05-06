@@ -22,6 +22,8 @@ import type { ReviewStore } from "../service/review/store";
 
 const log = logger.child({ module: "monitor/handlers/panel" });
 
+const DISCORD_UNKNOWN_MESSAGE = 10008;
+
 const NOT_CONFIGURED_MSG =
   "Monitor is not configured for this server. Use `/monitor setup` to get started.";
 
@@ -137,12 +139,13 @@ export class PanelHandler {
     }
   }
 
-  async refreshPanelEmbed(guildId: string, config?: MonitorsConfig): Promise<boolean> {
+  /** Returns "refreshed" | "message_gone" | "error" */
+  async refreshPanelEmbed(guildId: string, config?: MonitorsConfig): Promise<"refreshed" | "message_gone" | "error"> {
     const cfg = config ?? this.repo.getConfig(guildId);
-    if (!cfg?.panel_message_id) return false;
+    if (!cfg?.panel_message_id) return "message_gone";
 
     const channel = await this.client.channels.fetch(cfg.panel_channel_id);
-    if (!channel || !channel.isTextBased()) return false;
+    if (!channel || !channel.isTextBased()) return "error";
 
     try {
       const msg = await channel.messages.fetch(cfg.panel_message_id);
@@ -151,16 +154,16 @@ export class PanelHandler {
       await msg.edit(embedData);
     } catch (err) {
       const isUnknownMessage =
-        (err as any)?.code === 10008 ||
+        (err as any)?.code === DISCORD_UNKNOWN_MESSAGE ||
         (err instanceof Error && err.message.includes("Unknown Message"));
       if (isUnknownMessage) {
         log.warn({ err }, "Panel message not found or deleted, skipping embed refresh");
-      } else {
-        log.error({ err }, "Unexpected error refreshing panel embed");
+        return "message_gone";
       }
-      return false;
+      log.error({ err }, "Unexpected error refreshing panel embed");
+      return "error";
     }
-    return true;
+    return "refreshed";
   }
 
   /**
@@ -169,8 +172,8 @@ export class PanelHandler {
    */
   async ensurePanelSent(guildId: string, config: MonitorsConfig): Promise<void> {
     if (config.panel_message_id) {
-      const refreshed = await this.refreshPanelEmbed(guildId, config);
-      if (refreshed) return;
+      const result = await this.refreshPanelEmbed(guildId, config);
+      if (result !== "message_gone") return;
       // Message was deleted — fall through to re-send
     }
 

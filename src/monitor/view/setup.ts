@@ -15,6 +15,7 @@ import {
   TextInputStyle,
 } from "discord.js";
 import type { MonitorsConfig } from "../config";
+import { getConnectionId } from "../config";
 import type { GuildChannelSettings } from "../data/queries";
 
 // ---------------------------------------------------------------------------
@@ -221,7 +222,7 @@ export function buildConnectionsPage(
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(header));
 
   for (const conn of config.connections) {
-    const connId = `${conn.type}:${conn.handle}`;
+    const connId = getConnectionId(conn);
     const emoji =
       conn.type === "instagram" ? "📸" : conn.type === "tiktok" ? "🎵" : "🐦";
 

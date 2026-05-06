@@ -69,6 +69,10 @@ export class InteractionDispatcher {
           await this.reviewHandler.handlePost(interaction, customId.slice(REVIEW_POST_PREFIX.length));
         } else if (customId.startsWith(REVIEW_SKIP_PREFIX)) {
           await this.reviewHandler.handleSkip(interaction, customId.slice(REVIEW_SKIP_PREFIX.length));
+        } else {
+          // Setup panel buttons are handled by their per-message collector.
+          // If the collector has expired (5-min timeout), acknowledge to avoid "interaction failed".
+          await interaction.deferUpdate();
         }
       } else if (interaction.isStringSelectMenu()) {
         // Review remove select
