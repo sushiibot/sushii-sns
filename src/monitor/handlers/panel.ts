@@ -38,8 +38,8 @@ export class PanelHandler {
   private static readonly NOT_CONFIGURED_MSG =
     "Monitor is not configured for this server. Use `/monitor setup` to get started.";
 
-  private readonly MAX_REVIEWS_PER_POLL = 3;
-  private readonly MAX_STORIES_PER_POLL = 10;
+  private static readonly MAX_REVIEWS_PER_POLL = 3;
+  private static readonly MAX_STORIES_PER_POLL = 10;
 
   constructor(
     private readonly repo: MonitorRepository,
@@ -288,8 +288,8 @@ export class PanelHandler {
       posts = await fetchConnectionPosts(connection, downloadFilesFromUrls, {
         isPostSeen: (id) => this.repo.isPostSeen(guildId, connectionId, id),
         markPostSeen: (id) => this.repo.markPostSeen(guildId, connectionId, id),
-        limit: this.MAX_REVIEWS_PER_POLL,
-        storiesLimit: this.MAX_STORIES_PER_POLL,
+        limit: PanelHandler.MAX_REVIEWS_PER_POLL,
+        storiesLimit: PanelHandler.MAX_STORIES_PER_POLL,
       });
     } catch (err) {
       log.error({ err, connectionId }, "Failed to fetch connection posts");
@@ -322,10 +322,10 @@ export class PanelHandler {
       regularPosts = posts.filter((p) => !isInstagramStory(p));
       postsToReview = [
         ...stories,
-        ...regularPosts.slice(0, this.MAX_REVIEWS_PER_POLL),
+        ...regularPosts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL),
       ];
     } else {
-      postsToReview = posts.slice(0, this.MAX_REVIEWS_PER_POLL);
+      postsToReview = posts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL);
     }
 
     const socialsChannelId = config.socials_channel_id;
@@ -375,7 +375,7 @@ export class PanelHandler {
     this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
 
     if (connection.type === "instagram") {
-      const cappedPosts = regularPosts.slice(0, this.MAX_REVIEWS_PER_POLL);
+      const cappedPosts = regularPosts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL);
       await interaction.editReply(
         `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${cappedPosts.length} post${cappedPosts.length === 1 ? "" : "s"}). Review messages created below.`,
       );

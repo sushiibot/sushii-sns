@@ -32,8 +32,6 @@ import {
 } from "../view/setup";
 import type { PanelHandler } from "./panel";
 
-export { SETUP_TEMPLATE_MODAL, SETUP_CONNECTION_ADD_MODAL };
-
 const log = logger.child({ module: "monitor/handlers/config" });
 
 const COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;

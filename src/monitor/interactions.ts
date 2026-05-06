@@ -18,7 +18,7 @@ import type { PanelHandler } from "./handlers/panel";
 import type { ReviewHandler } from "./handlers/review";
 import type { PostHandler } from "./handlers/post";
 import type { ConfigHandler } from "./handlers/config";
-import { SETUP_TEMPLATE_MODAL, SETUP_CONNECTION_ADD_MODAL } from "./handlers/config";
+import { SETUP_TEMPLATE_MODAL, SETUP_CONNECTION_ADD_MODAL } from "./view/setup";
 
 const log = logger.child({ module: "monitor/interactions" });
 

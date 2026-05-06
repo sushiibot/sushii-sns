@@ -59,7 +59,7 @@ export type SetupPage = {
  * Discord.js's update() type does not include flags in its payload.
  */
 export function pageToUpdateOptions(page: SetupPage): Omit<SetupPage, "flags"> {
-  const { flags, ...rest } = page;
+  const { flags: _flags, ...rest } = page;
   return rest;
 }
 
