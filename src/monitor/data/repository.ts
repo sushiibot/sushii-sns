@@ -17,7 +17,7 @@ import {
   updatePanelMessage,
   upsertConnectionMeta,
   upsertGuildSettings,
-  upsertGuildTemplate,
+  updateGuildTemplate,
   upsertPostedMessageTracking,
   type GuildChannelSettings,
   type LastFetch,
@@ -34,7 +34,7 @@ export interface MonitorRepository extends PostTrackingSink {
   // Config
   getConfig(guildId: string): MonitorsConfig | null;
   upsertSettings(guildId: string, settings: GuildChannelSettings): void;
-  upsertTemplate(guildId: string, format: "inline" | "links", template: string): void;
+  updateTemplate(guildId: string, format: "inline" | "links", template: string): void;
   updatePanelMessage(guildId: string, messageId: string): void;
   addMonitor(guildId: string, connection: Connection): void;
   removeMonitor(guildId: string, type: string, handle: string): void;
@@ -66,8 +66,8 @@ export function createMonitorRepository(db: Database): MonitorRepository {
     upsertSettings(guildId, settings) {
       upsertGuildSettings(db, guildId, settings);
     },
-    upsertTemplate(guildId, format, template) {
-      upsertGuildTemplate(db, guildId, format, template);
+    updateTemplate(guildId, format, template) {
+      updateGuildTemplate(db, guildId, format, template);
     },
     updatePanelMessage(guildId, messageId) {
       updatePanelMessage(db, guildId, messageId);

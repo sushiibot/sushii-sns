@@ -343,7 +343,7 @@ export class ConfigHandler {
     const template = interaction.fields.getTextInputValue("template").trim();
 
     try {
-      this.repo.upsertTemplate(guildId, rawFormat, template);
+      this.repo.updateTemplate(guildId, rawFormat, template);
     } catch (err) {
       log.error({ err, guildId }, "Failed to save template");
       await interaction.reply({ ...ephemeralError("Failed to save template.") });

@@ -138,7 +138,7 @@ export function upsertGuildSettings(
   );
 }
 
-export function upsertGuildTemplate(
+export function updateGuildTemplate(
   db: Database,
   guildId: string,
   format: MonitorFormat,

@@ -14,6 +14,11 @@ export const DEFAULT_LINKS_TEMPLATE =
 export const DEFAULT_INLINE_TEMPLATE =
   "`{date_kst} {username} {platform} Update`\n<{post_url}>\n{caption}";
 
+/**
+ * Variables available for substitution in post templates.
+ * Field names are camelCase here but referenced as snake_case in template strings
+ * (e.g. `dateKst` → `{date_kst}`, `postUrl` → `{post_url}`).
+ */
 export type TemplateVars = {
   dateKst: string;
   username: string;
@@ -24,13 +29,15 @@ export type TemplateVars = {
 };
 
 export function renderTemplate(template: string, vars: TemplateVars): string {
-  return template
-    .replace(/\{date_kst\}/g, vars.dateKst)
-    .replace(/\{username\}/g, vars.username)
-    .replace(/\{post_url\}/g, vars.postUrl)
-    .replace(/\{caption\}/g, vars.caption)
-    .replace(/\{platform\}/g, vars.platform)
-    .replace(/\{links\}/g, vars.links ?? "");
+  const map: Record<string, string> = {
+    date_kst: vars.dateKst,
+    username: vars.username,
+    post_url: vars.postUrl,
+    caption: vars.caption,
+    platform: vars.platform,
+    links: vars.links ?? "",
+  };
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => map[key] ?? "");
 }
 
 export function buildTemplateVars(
@@ -132,22 +139,10 @@ export function buildInlineFormatContent(
  */
 export function suppressLinksInTextExceptLast(text: string): string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const urls: string[] = [];
-  let match;
-  
-  // Find all URLs
-  while ((match = urlRegex.exec(text)) !== null) {
-    urls.push(match[0]);
-  }
-  
-  if (urls.length === 0) return text;
-  
-  const urlCount = urls.length;
-  let matchIndex = 0;
-
-  return text.replace(urlRegex, (url) => {
-    const currentIndex = matchIndex++;
-    if (currentIndex === urlCount - 1) return url; // last occurrence — don't suppress
-    return `<${url}>`;
-  });
+  const matches = [...text.matchAll(urlRegex)];
+  if (matches.length === 0) return text;
+  let i = 0;
+  return text.replace(urlRegex, (url) =>
+    i++ === matches.length - 1 ? url : `<${url}>`
+  );
 }
