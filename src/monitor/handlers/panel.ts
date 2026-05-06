@@ -1,5 +1,6 @@
 import { RESTJSONErrorCodes } from "discord-api-types/v10";
 import {
+  DiscordAPIError,
   GuildMember,
   MessageFlags,
   type ButtonInteraction,
@@ -154,8 +155,7 @@ export class PanelHandler {
       await msg.edit(embedData);
     } catch (err) {
       const isUnknownMessage =
-        (err as any)?.code === RESTJSONErrorCodes.UnknownMessage ||
-        (err instanceof Error && err.message.includes("Unknown Message"));
+        err instanceof DiscordAPIError && err.code === RESTJSONErrorCodes.UnknownMessage;
       if (isUnknownMessage) {
         log.warn({ err }, "Panel message not found or deleted, skipping embed refresh");
         return "message_gone";
