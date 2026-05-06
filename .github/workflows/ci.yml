@@ -34,6 +34,20 @@ jobs:
       contents: read
       packages: write
 
+  deploy:
+    needs: docker-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: sushiibot/sushii-workflows/.github/workflows/deploy.yml@main
+    with:
+      service: private-bots/sushii-sns
+      image_version: ${{ needs.docker-build.outputs.image_version }}
+      host: apps
+    secrets:
+      ANSIBLE_REPO_TOKEN: ${{ secrets.ANSIBLE_REPO_TOKEN }}
+      ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+      ANSIBLE_KNOWN_HOSTS: ${{ secrets.ANSIBLE_KNOWN_HOSTS }}
+      ANSIBLE_VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+
   docker-cleanup:
     needs: docker-build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
