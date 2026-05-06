@@ -2,10 +2,12 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  type MessageCreateOptions,
+  ContainerBuilder,
+  MessageFlags,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
 } from "discord.js";
-import { chunkArray } from "../../utils/discord";
 import type { LastFetch } from "../data/repository";
 import logger from "../../logger";
 import { MONITOR_POLL_PREFIX } from "../service/review/types";
@@ -17,6 +19,12 @@ export type PanelConnectionMeta = {
   label: string;
   cooldownSeconds: number;
   lastFetch: LastFetch | null;
+};
+
+type PanelMessage = {
+  components: ContainerBuilder[];
+  flags: number;
+  embeds: [];
 };
 
 function typeToEmoji(connectionId: string): string {
@@ -35,65 +43,69 @@ function typeToButtonStyle(connectionId: string): ButtonStyle {
 
 export function buildPanelEmbed(
   connections: PanelConnectionMeta[],
-): Pick<MessageCreateOptions, "embeds" | "components"> {
+): PanelMessage {
   const now = Math.floor(Date.now() / 1000);
 
   if (connections.length > 25) {
     log.warn(
       { count: connections.length },
-      "Too many connections for a single panel embed, truncating to 25",
+      "Too many connections for a single panel, truncating to 25",
     );
   }
 
-  const connectionsMeta = connections.slice(0, 25); // Discord limit: 25 embed fields
+  const connectionsMeta = connections.slice(0, 25);
+  const container = new ContainerBuilder();
 
-  const embed = new EmbedBuilder()
-    .setColor(0xe1306c)
-    .setTitle("📡 SNS Monitor Panel")
-    .setDescription("Click a Poll button to fetch the latest posts for that connection.");
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      "## 📡 SNS Monitor Panel\nClick a Poll button to fetch the latest posts for that connection.",
+    ),
+  );
 
-  const fields = connectionsMeta.map((c) => {
-    let lastFetchedValue: string;
-    let nextFetchValue: string;
+  if (connectionsMeta.length === 0) {
+    container.addSeparatorComponents(
+      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small),
+    );
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        "_No connections configured. Use `/monitor setup` to add one._",
+      ),
+    );
+  } else {
+    for (const c of connectionsMeta) {
+      container.addSeparatorComponents(
+        new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small),
+      );
 
-    if (c.lastFetch) {
-      const lastFetchedSec = Math.floor(c.lastFetch.last_fetched_at / 1000);
-      lastFetchedValue = `<t:${lastFetchedSec}:R> by ${c.lastFetch.last_fetched_by}`;
-
-      const nextFetchSec = lastFetchedSec + c.cooldownSeconds;
-      if (now >= nextFetchSec) {
-        nextFetchValue = "Now";
+      let statusLine: string;
+      if (c.lastFetch) {
+        const lastFetchedSec = Math.floor(c.lastFetch.last_fetched_at / 1000);
+        const nextFetchSec = lastFetchedSec + c.cooldownSeconds;
+        const nextPoll = now >= nextFetchSec ? "Now" : `<t:${nextFetchSec}:R>`;
+        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: <t:${lastFetchedSec}:R> by ${c.lastFetch.last_fetched_by} · Next poll: ${nextPoll}`;
       } else {
-        nextFetchValue = `<t:${nextFetchSec}:R>`;
+        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: Never · Next poll: Now`;
       }
-    } else {
-      lastFetchedValue = "Never";
-      nextFetchValue = "Now";
+
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(statusLine),
+      );
+
+      const button = new ButtonBuilder()
+        .setCustomId(`${MONITOR_POLL_PREFIX}${c.connectionId}`)
+        .setLabel(c.connectionId.split(":")[1] ?? c.label)
+        .setEmoji(typeToEmoji(c.connectionId))
+        .setStyle(typeToButtonStyle(c.connectionId));
+
+      container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(button),
+      );
     }
-
-    return {
-      name: c.label,
-      value: `Last fetched: ${lastFetchedValue}\nNext poll: ${nextFetchValue}`,
-      inline: true,
-    };
-  });
-
-  embed.addFields(fields);
-
-  const buttons = connectionsMeta.map((c) =>
-    new ButtonBuilder()
-      .setCustomId(`${MONITOR_POLL_PREFIX}${c.connectionId}`)
-      .setLabel(c.connectionId.split(":")[1] ?? c.label)
-      .setEmoji(typeToEmoji(c.connectionId))
-      .setStyle(typeToButtonStyle(c.connectionId)),
-  );
-
-  const rows = chunkArray(buttons, 5).map(
-    (group) => new ActionRowBuilder<ButtonBuilder>().addComponents(group),
-  );
+  }
 
   return {
-    embeds: [embed],
-    components: rows,
+    components: [container],
+    flags: MessageFlags.IsComponentsV2,
+    embeds: [],
   };
 }

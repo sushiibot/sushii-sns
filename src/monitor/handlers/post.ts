@@ -2,7 +2,6 @@ import {
   ActionRowBuilder,
   MessageFlags,
   type ChatInputCommandInteraction,
-  type SendableChannels,
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
@@ -102,7 +101,7 @@ export class PostHandler {
     }
 
     const socialsChannel = await interaction.client.channels.fetch(config.socials_channel_id);
-    if (!socialsChannel || !("send" in socialsChannel)) {
+    if (!socialsChannel || !socialsChannel.isSendable()) {
       await interaction.editReply("❌ Could not find the socials channel.");
       return;
     }
@@ -152,7 +151,7 @@ export class PostHandler {
         ? getConnectionId({ type: connectionTypeParsed.data, handle: postData.username! })
         : undefined;
 
-      const result = await sendPostToChannel(socialsChannel as SendableChannels, postData, {
+      const result = await sendPostToChannel(socialsChannel, postData, {
         format: config.format,
         template: config.template,
         ...(trackInDb && connectionIdForDb && postData.postID

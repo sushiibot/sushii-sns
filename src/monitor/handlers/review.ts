@@ -7,7 +7,6 @@ import {
   type ButtonInteraction,
   type MessageEditOptions,
   type ModalSubmitInteraction,
-  type SendableChannels,
   type StringSelectMenuInteraction,
   type TextBasedChannel,
 } from "discord.js";
@@ -307,7 +306,7 @@ export class ReviewHandler {
   ): Promise<void> {
     try {
       const channel = await interaction.client.channels.fetch(state.socialsChannelId);
-      if (!channel || !channel.isTextBased() || !("send" in channel)) {
+      if (!channel || !channel.isSendable()) {
         // Clean up media batch messages so channel isn't cluttered
         await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
         await editStatusMessage(reviewChannel, lastMsgId, "❌ Failed - channel not sendable");
@@ -318,7 +317,7 @@ export class ReviewHandler {
 
       let result: SendPostResult;
       try {
-        result = await sendPostToChannel(channel as SendableChannels, filteredPostData, {
+        result = await sendPostToChannel(channel, filteredPostData, {
           format: state.format,
           template: state.template,
           postTracking: {

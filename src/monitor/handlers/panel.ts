@@ -6,7 +6,6 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
-  type SendableChannels,
 } from "discord.js";
 import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
@@ -172,20 +171,20 @@ export class PanelHandler {
   async ensurePanelSent(guildId: string, config: MonitorsConfig): Promise<void> {
     if (config.panel_message_id) {
       const result = await this.refreshPanelEmbed(guildId, config);
-      if (result !== "message_gone") return;
-      // Message was deleted — fall through to re-send
+      if (result === "refreshed") return;
+      // message_gone or error (e.g. transitioning from legacy embed) — fall through to re-send
     }
 
     try {
       const channel = await this.client.channels.fetch(config.panel_channel_id);
-      if (!channel || !("send" in channel)) {
+      if (!channel || !channel.isSendable()) {
         log.warn({ guildId, channelId: config.panel_channel_id }, "Panel channel not found or not sendable");
         return;
       }
 
       const connectionsMeta = this.buildPanelConnectionsMeta(guildId, config);
       const embedData = buildPanelEmbed(connectionsMeta);
-      const msg = await (channel as SendableChannels).send(embedData);
+      const msg = await channel.send(embedData);
 
       try {
         await msg.pin();
@@ -304,7 +303,7 @@ export class PanelHandler {
     }
 
     const reviewChannel = interaction.channel;
-    if (!reviewChannel || !("send" in reviewChannel)) {
+    if (!reviewChannel || !reviewChannel.isSendable()) {
       await interaction.editReply("Cannot send review messages in this channel.");
       return;
     }
@@ -358,7 +357,7 @@ export class PanelHandler {
         const messageIds: string[] = [];
 
         for (const batch of batches) {
-          const msg = await (reviewChannel as SendableChannels).send(
+          const msg = await reviewChannel.send(
             batchToMessageOptions(batch),
           );
           messageIds.push(msg.id);
