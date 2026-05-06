@@ -37,7 +37,7 @@ export function renderTemplate(template: string, vars: TemplateVars): string {
     platform: vars.platform,
     links: vars.links ?? "",
   };
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => map[key] ?? "");
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => map[key] ?? match);
 }
 
 export function buildTemplateVars(
