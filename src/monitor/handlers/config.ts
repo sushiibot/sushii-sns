@@ -78,6 +78,12 @@ export class ConfigHandler {
     private readonly panelHandler: PanelHandler,
   ) {}
 
+  /** Extract the 4 GuildChannelSettings fields from a MonitorsConfig, with optional overrides. */
+  private settingsFrom(config: GuildChannelSettings, overrides?: Partial<GuildChannelSettings>): GuildChannelSettings {
+    const { panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id } = config;
+    return { panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id, ...overrides };
+  }
+
   // ---------------------------------------------------------------------------
   // Slash command entry point
   // ---------------------------------------------------------------------------
@@ -261,13 +267,7 @@ export class ConfigHandler {
 
     if (currentConfig) {
       const prevPanelChannel = currentConfig.panel_channel_id;
-      this.repo.upsertSettings(guildId, {
-        panel_channel_id: currentConfig.panel_channel_id,
-        socials_channel_id: currentConfig.socials_channel_id,
-        trigger_role_id: currentConfig.trigger_role_id,
-        log_channel_id: currentConfig.log_channel_id,
-        [field]: newChannelId,
-      });
+      this.repo.upsertSettings(guildId, this.settingsFrom(currentConfig, { [field]: newChannelId }));
 
       // If panel channel changed, send panel to new channel
       if (field === "panel_channel_id" && newChannelId && newChannelId !== prevPanelChannel) {
@@ -319,12 +319,7 @@ export class ConfigHandler {
     const currentConfig = this.repo.getConfig(guildId);
 
     if (currentConfig) {
-      this.repo.upsertSettings(guildId, {
-        panel_channel_id: currentConfig.panel_channel_id,
-        socials_channel_id: currentConfig.socials_channel_id,
-        trigger_role_id: newRoleId,
-        log_channel_id: currentConfig.log_channel_id,
-      });
+      this.repo.upsertSettings(guildId, this.settingsFrom(currentConfig, { trigger_role_id: newRoleId }));
     } else {
       const newPending: Partial<GuildChannelSettings> = {
         ...(this.pendingSettings.get(messageId) ?? {}),

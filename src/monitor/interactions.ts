@@ -108,6 +108,8 @@ export class InteractionDispatcher {
       await this.configHandler.handleConnectionAddModalSubmit(interaction);
     } else if (customId.startsWith(REVIEW_MODAL_PREFIX)) {
       await this.reviewHandler.handleModalSubmit(interaction, customId.slice(REVIEW_MODAL_PREFIX.length));
+    } else {
+      await interaction.deferUpdate();
     }
   }
 

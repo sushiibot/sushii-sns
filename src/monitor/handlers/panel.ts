@@ -25,10 +25,6 @@ import type { ReviewStore } from "../service/review/store";
 const log = logger.child({ module: "monitor/handlers/panel" });
 
 
-const NOT_CONFIGURED_MSG =
-  "Monitor is not configured for this server. Use `/monitor setup` to get started.";
-
-
 function getDisplayName(interaction: ButtonInteraction): string {
   const member = interaction.member;
   if (member instanceof GuildMember) return member.displayName;
@@ -38,6 +34,9 @@ function getDisplayName(interaction: ButtonInteraction): string {
 export class PanelHandler {
   // Per-connection lock set — prevents concurrent fetches for the same connection
   private activeFetches = new Set<string>();
+
+  private static readonly NOT_CONFIGURED_MSG =
+    "Monitor is not configured for this server. Use `/monitor setup` to get started.";
 
   private readonly MAX_REVIEWS_PER_POLL = 3;
   private readonly MAX_STORIES_PER_POLL = 10;
@@ -58,7 +57,7 @@ export class PanelHandler {
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await interaction.reply({ content: NOT_CONFIGURED_MSG, flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: PanelHandler.NOT_CONFIGURED_MSG, flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -212,7 +211,7 @@ export class PanelHandler {
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await cmd.editReply({ content: NOT_CONFIGURED_MSG });
+      await cmd.editReply({ content: PanelHandler.NOT_CONFIGURED_MSG });
       return;
     }
 
@@ -250,7 +249,7 @@ export class PanelHandler {
 
     const config = this.repo.getConfig(guildId);
     if (!config) {
-      await cmd.editReply({ content: NOT_CONFIGURED_MSG });
+      await cmd.editReply({ content: PanelHandler.NOT_CONFIGURED_MSG });
       return;
     }
 
@@ -310,15 +309,16 @@ export class PanelHandler {
       return;
     }
 
-    let postsToReview: PostData<AnySnsMetadata>[] = [];
-    let stories: PostData<AnySnsMetadata>[] = [];
+    let postsToReview: PostData<AnySnsMetadata>[];
     let regularPosts: PostData<AnySnsMetadata>[] = [];
+    let storiesCount = 0;
 
     if (connection.type === "instagram") {
       const isInstagramStory = (p: PostData<AnySnsMetadata>): boolean =>
         p.postLink?.metadata?.platform === "instagram-story";
 
-      stories = posts.filter(isInstagramStory);
+      const stories = posts.filter(isInstagramStory);
+      storiesCount = stories.length;
       regularPosts = posts.filter((p) => !isInstagramStory(p));
       postsToReview = [
         ...stories,
@@ -377,7 +377,7 @@ export class PanelHandler {
     if (connection.type === "instagram") {
       const cappedPosts = regularPosts.slice(0, this.MAX_REVIEWS_PER_POLL);
       await interaction.editReply(
-        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${stories.length} ${stories.length === 1 ? "story" : "stories"} + ${cappedPosts.length} post${cappedPosts.length === 1 ? "" : "s"}). Review messages created below.`,
+        `Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${cappedPosts.length} post${cappedPosts.length === 1 ? "" : "s"}). Review messages created below.`,
       );
     } else {
       await interaction.editReply(

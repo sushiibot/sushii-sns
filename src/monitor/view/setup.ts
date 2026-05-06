@@ -71,7 +71,7 @@ export function pageToUpdateOptions(page: SetupPage): Omit<SetupPage, "flags"> {
  */
 export function buildSettingsPage(
   config: MonitorsConfig | null,
-  pending?: Partial<GuildChannelSettings> | null,
+  pending: Partial<GuildChannelSettings> | null,
   opts: SetupPageOptions = {},
 ): SetupPage {
   const { disabled = false } = opts;

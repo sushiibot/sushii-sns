@@ -41,23 +41,6 @@ export async function registerSlashCommands(
       opt.setName("url").setDescription("Post URL").setRequired(true),
     );
 
-  const usageCommand = new SlashCommandBuilder()
-    .setName("usage")
-    .setDescription("Show API call counters (used / quota hint) for this bot process")
-    .setContexts(InteractionContextType.Guild)
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption((opt) =>
-      opt
-        .setName("scope")
-        .setDescription("What to show")
-        .setRequired(true)
-        .addChoices(
-          { name: "Providers + endpoints", value: "all" },
-          { name: "Providers only", value: "providers" },
-          { name: "Endpoints only", value: "endpoints" },
-        ),
-    );
-
   const fetchAllCommand = new SlashCommandBuilder()
     .setName("fetch-all")
     .setDescription(
@@ -73,7 +56,6 @@ export async function registerSlashCommands(
       body: [
         monitorCommand.toJSON(),
         postCommand.toJSON(),
-        usageCommand.toJSON(),
         fetchAllCommand.toJSON(),
       ],
     });
