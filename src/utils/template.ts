@@ -139,10 +139,10 @@ export function buildInlineFormatContent(
  */
 export function suppressLinksInTextExceptLast(text: string): string {
   const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const matches = [...text.matchAll(urlRegex)];
-  if (matches.length === 0) return text;
+  let total = 0;
+  // Count matches first
+  for (const _ of text.matchAll(urlRegex)) total++;
+  if (total === 0) return text;
   let i = 0;
-  return text.replace(urlRegex, (url) =>
-    i++ === matches.length - 1 ? url : `<${url}>`
-  );
+  return text.replace(urlRegex, (url) => (++i === total ? url : `<${url}>`));
 }

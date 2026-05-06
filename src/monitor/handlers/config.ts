@@ -256,6 +256,12 @@ export class ConfigHandler {
     // Optional selects (min 0) may return empty values to clear
     const newChannelId = interaction.values[0] ?? null;
 
+    // panel_channel_id and socials_channel_id are NOT NULL in the DB schema
+    if ((field === "panel_channel_id" || field === "socials_channel_id") && newChannelId === null) {
+      await interaction.deferUpdate();
+      return;
+    }
+
     const currentConfig = this.repo.getConfig(guildId);
 
     if (currentConfig) {
