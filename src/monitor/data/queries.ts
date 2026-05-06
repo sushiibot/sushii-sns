@@ -1,7 +1,6 @@
-import { z } from "zod";
 import { Database } from "bun:sqlite";
 import logger from "../../logger";
-import { MonitorsConfig, ConnectionTypeSchema, parseConnectionId, type Connection } from "../config";
+import { MonitorsConfig, ConnectionTypeSchema, FormatSchema, parseConnectionId, type Connection, type MonitorFormat } from "../config";
 import { METADATA_MIGRATIONS } from "./schema";
 
 const log = logger.child({ module: "monitor/db" });
@@ -42,8 +41,6 @@ export function openMetadataDb(path: string): Database {
 
   return db;
 }
-
-const FormatSchema = z.enum(["links", "inline"]);
 
 // ---------------------------------------------------------------------------
 // Config — guild_settings + monitors
@@ -144,7 +141,7 @@ export function upsertGuildSettings(
 export function upsertGuildTemplate(
   db: Database,
   guildId: string,
-  format: "inline" | "links",
+  format: MonitorFormat,
   template: string,
 ): void {
   db.query(

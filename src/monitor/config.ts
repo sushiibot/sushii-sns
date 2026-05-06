@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { DEFAULT_INLINE_TEMPLATE, DEFAULT_LINKS_TEMPLATE } from "../utils/template";
 
+export const FormatSchema = z.enum(["links", "inline"] as const);
+export type MonitorFormat = z.infer<typeof FormatSchema>;
+
 export const ConnectionTypeSchema = z.enum(["instagram", "tiktok", "twitter"]);
 
 export const ConnectionSchema = z.object({
@@ -19,7 +22,7 @@ export class MonitorsConfig {
   readonly socials_channel_id: string;
   readonly trigger_role_id: string | null;
   readonly log_channel_id: string | null;
-  readonly format: "links" | "inline";
+  readonly format: MonitorFormat;
   /** Raw stored template — empty string means "use default". */
   private readonly rawTemplate: string;
   readonly connections: Connection[];
@@ -30,7 +33,7 @@ export class MonitorsConfig {
     socials_channel_id: string;
     trigger_role_id: string | null;
     log_channel_id: string | null;
-    format: "links" | "inline";
+    format: MonitorFormat;
     template: string;
     connections: Connection[];
   }) {
