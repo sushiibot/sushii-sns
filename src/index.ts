@@ -56,30 +56,50 @@ async function main(): Promise<void> {
   log.info("Monitor feature enabled (config managed via /monitor config setup)");
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-      switch (interaction.commandName) {
-        case "usage":
-          await handleUsageSlash(interaction);
-          break;
+    try {
+      log.debug(
+        {
+          type: interaction.type,
+          commandName: interaction.isChatInputCommand() ? interaction.commandName : undefined,
+          guildId: interaction.guildId,
+        },
+        "InteractionCreate received",
+      );
 
-        case "monitor":
-        case "post":
-        case "fetch-all":
-          await monitor.handleInteraction(interaction);
-          break;
+      if (interaction.isChatInputCommand()) {
+        switch (interaction.commandName) {
+          case "usage":
+            await handleUsageSlash(interaction);
+            break;
 
-        default:
-          log.warn({ commandName: interaction.commandName }, "Unrecognized slash command");
-          await interaction.reply({
-            content: "Unknown command.",
-            flags: MessageFlags.Ephemeral,
-          });
+          case "monitor":
+          case "post":
+          case "fetch-all":
+            await monitor.handleInteraction(interaction);
+            break;
+
+          default:
+            log.warn({ commandName: interaction.commandName }, "Unrecognized slash command");
+            await interaction.reply({
+              content: "Unknown command.",
+              flags: MessageFlags.Ephemeral,
+            });
+        }
+        return;
       }
-      return;
-    }
 
-    // Buttons, modals, select menus — all belong to the monitor feature.
-    await monitor.handleInteraction(interaction);
+      // Buttons, modals, select menus — all belong to the monitor feature.
+      await monitor.handleInteraction(interaction);
+    } catch (err) {
+      log.error({ err }, "Unhandled error in InteractionCreate handler");
+      try {
+        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+          await interaction.reply({ content: "An error occurred.", flags: MessageFlags.Ephemeral });
+        }
+      } catch {
+        // ignore
+      }
+    }
   });
 
   const httpServer = await startHealthCheckServer(clientHealthy(client));

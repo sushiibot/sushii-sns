@@ -55,6 +55,14 @@ export class InteractionDispatcher {
   ) {}
 
   async handleInteraction(interaction: Interaction): Promise<void> {
+    log.debug(
+      {
+        type: interaction.type,
+        commandName: interaction.isChatInputCommand() ? interaction.commandName : undefined,
+        guildId: interaction.guildId,
+      },
+      "Monitor handleInteraction",
+    );
     try {
       if (interaction.isStringSelectMenu()) {
         await this.handleSelectMenu(interaction);
