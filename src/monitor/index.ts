@@ -25,13 +25,11 @@ export function createMonitor(
   const panelHandler = new PanelHandler(repo, reviewStore, serverConfig, client);
   const reviewHandler = new ReviewHandler(reviewStore, postQueue, repo);
   const postHandler = new PostHandler(repo);
-  const configHandler = new ConfigHandler(repo);
+  const configHandler = new ConfigHandler(repo, panelHandler);
 
   const dispatcher = new InteractionDispatcher(panelHandler, reviewHandler, postHandler, configHandler);
 
   return {
     handleInteraction: dispatcher.handleInteraction.bind(dispatcher),
-    registerCommands: (applicationId: string, token: string) =>
-      registerSlashCommands(applicationId, token),
   };
 }

@@ -1,15 +1,10 @@
 import {
-  ActionRowBuilder,
   GuildMember,
   MessageFlags,
-  PermissionFlagsBits,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type SendableChannels,
-  type StringSelectMenuInteraction,
 } from "discord.js";
 import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
@@ -28,9 +23,8 @@ import type { ReviewStore } from "../service/review/store";
 const log = logger.child({ module: "monitor/handlers/panel" });
 
 const NOT_CONFIGURED_MSG =
-  "Monitor is not configured for this server. Use `/monitor config setup` to get started.";
+  "Monitor is not configured for this server. Use `/monitor setup` to get started.";
 
-export const DB_PURGE_CONNECTION_SELECT_ID = "monitor:db:purge-connection";
 
 function getDisplayName(interaction: ButtonInteraction): string {
   const member = interaction.member;
@@ -166,28 +160,40 @@ export class PanelHandler {
     return true;
   }
 
-  async postAndPinPanelEmbed(
-    interaction: ChatInputCommandInteraction,
-    guildId: string,
-    config: MonitorsConfig,
-  ): Promise<void> {
-    if (!interaction.channel || !("send" in interaction.channel)) {
-      throw new Error("Cannot send in this channel.");
+  /**
+   * Post+pin the panel to the configured panel channel and save the message ID.
+   * Fetches the channel from the client — does not require a command interaction.
+   */
+  async ensurePanelSent(guildId: string, config: MonitorsConfig): Promise<void> {
+    if (config.panel_message_id) {
+      const refreshed = await this.refreshPanelEmbed(guildId, config);
+      if (refreshed) return;
+      // Message was deleted — fall through to re-send
     }
-
-    const connectionsMeta = this.buildPanelConnectionsMeta(guildId, config);
-    const embedData = buildPanelEmbed(connectionsMeta);
-
-    const msg = await (interaction.channel as SendableChannels).send(embedData);
 
     try {
-      await msg.pin();
-    } catch (err) {
-      log.warn(err, "Failed to pin panel embed");
-    }
+      const channel = await this.client.channels.fetch(config.panel_channel_id);
+      if (!channel || !("send" in channel)) {
+        log.warn({ guildId, channelId: config.panel_channel_id }, "Panel channel not found or not sendable");
+        return;
+      }
 
-    this.repo.updatePanelMessage(guildId, msg.id);
+      const connectionsMeta = this.buildPanelConnectionsMeta(guildId, config);
+      const embedData = buildPanelEmbed(connectionsMeta);
+      const msg = await (channel as SendableChannels).send(embedData);
+
+      try {
+        await msg.pin();
+      } catch (err) {
+        log.warn(err, "Failed to pin panel embed");
+      }
+
+      this.repo.updatePanelMessage(guildId, msg.id);
+    } catch (err) {
+      log.error({ err, guildId }, "Failed to send panel embed");
+    }
   }
+
 
   async handleFetchAll(cmd: ChatInputCommandInteraction): Promise<void> {
     await cmd.deferReply({ flags: MessageFlags.Ephemeral });
@@ -195,11 +201,6 @@ export class PanelHandler {
     const guildId = cmd.guildId;
     if (!guildId) {
       await cmd.editReply({ content: "Must be used in a guild." });
-      return;
-    }
-
-    if (!cmd.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      await cmd.editReply({ content: "You need Manage Server permission to use this command." });
       return;
     }
 
@@ -212,8 +213,11 @@ export class PanelHandler {
     const connectionIds = config.connections.map((c) => getConnectionId(c));
     const idsToLock = connectionIds.filter((id) => !this.activeFetches.has(id));
     for (const id of idsToLock) this.activeFetches.add(id);
+    const lockedConnections = config.connections.filter(
+      (c) => idsToLock.includes(getConnectionId(c))
+    );
     try {
-      await syncAllMonitorConnections(guildId, config.connections, this.repo, {
+      await syncAllMonitorConnections(guildId, lockedConnections, this.repo, {
         lastFetchedBy: cmd.user.username,
       });
       await this.refreshPanelEmbed(guildId, config);
@@ -226,39 +230,6 @@ export class PanelHandler {
       await cmd.editReply({ content: "Something went wrong while syncing." });
     } finally {
       for (const id of idsToLock) this.activeFetches.delete(id);
-    }
-  }
-
-  async handlePanelSetup(cmd: ChatInputCommandInteraction): Promise<void> {
-    await cmd.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const guildId = cmd.guildId;
-    if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
-      return;
-    }
-
-    const config = this.repo.getConfig(guildId);
-    if (!config) {
-      await cmd.editReply({ content: NOT_CONFIGURED_MSG });
-      return;
-    }
-
-    if (cmd.channelId !== config.panel_channel_id) {
-      await cmd.editReply({ content: "Run this command in the configured panel channel." });
-      return;
-    }
-
-    if (await this.refreshPanelEmbed(guildId, config)) {
-      await cmd.editReply({ content: "Panel embed refreshed." });
-      return;
-    }
-
-    try {
-      await this.postAndPinPanelEmbed(cmd, guildId, config);
-      await cmd.editReply({ content: "Panel embed posted and pinned." });
-    } catch {
-      await cmd.editReply({ content: "Failed to post panel embed." });
     }
   }
 
@@ -277,110 +248,8 @@ export class PanelHandler {
       return;
     }
 
-    if (!(await this.refreshPanelEmbed(guildId, config))) {
-      await cmd.editReply({ content: "Panel embed not found. Run panel setup first." });
-      return;
-    }
-
-    await cmd.editReply({ content: "Panel embed refreshed." });
-  }
-
-  async handleDbPurgeConnection(cmd: ChatInputCommandInteraction): Promise<void> {
-    const guildId = cmd.guildId;
-    if (!guildId) {
-      await cmd.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const config = this.repo.getConfig(guildId);
-    if (!config || config.connections.length === 0) {
-      await cmd.reply({ content: NOT_CONFIGURED_MSG, flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(DB_PURGE_CONNECTION_SELECT_ID)
-      .setPlaceholder("Select a connection to purge")
-      .addOptions(
-        config.connections.map((c) => {
-          const id = getConnectionId(c);
-          return new StringSelectMenuOptionBuilder().setLabel(id).setValue(id);
-        }),
-      );
-
-    await cmd.reply({
-      content: "Select a connection to purge (resets cooldown and seen-post history):",
-      components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-
-  async handleDbPurgeConnectionSelect(interaction: StringSelectMenuInteraction): Promise<void> {
-    const guildId = interaction.guildId;
-    if (!guildId) {
-      await interaction.reply({ content: "Must be used in a guild.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    const config = this.repo.getConfig(guildId);
-    if (!config) {
-      await interaction.update({ content: NOT_CONFIGURED_MSG, components: [] });
-      return;
-    }
-
-    const connectionId = interaction.values[0];
-    if (!connectionId) {
-      await interaction.reply({ content: "No connection selected.", flags: MessageFlags.Ephemeral });
-      return;
-    }
-
-    try {
-      this.repo.purgeConnectionSeenPosts(guildId, connectionId);
-      this.repo.purgeConnectionMeta(guildId, connectionId);
-    } catch (err) {
-      log.error({ err, connectionId }, "Failed to purge connection DB");
-      await interaction.update({ content: "Failed to purge connection DB.", components: [] });
-      return;
-    }
-
-    await sendMonitorLog(
-      this.client,
-      config.log_channel_id,
-      `DB purged for connection: \`${connectionId}\` by ${interaction.user.username}`,
-    );
-    await interaction.update({ content: `✅ Purged DB for \`${connectionId}\`.`, components: [] });
-  }
-
-  async handleDbPurgeAll(cmd: ChatInputCommandInteraction): Promise<void> {
-    await cmd.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const guildId = cmd.guildId;
-    if (!guildId) {
-      await cmd.editReply({ content: "Must be used in a guild." });
-      return;
-    }
-
-    const config = this.repo.getConfig(guildId);
-    if (!config) {
-      await cmd.editReply({ content: NOT_CONFIGURED_MSG });
-      return;
-    }
-
-    try {
-      this.repo.purgeAllSeenPosts(guildId);
-      this.repo.purgeAllConnectionMeta(guildId);
-    } catch (err) {
-      log.error({ err }, "Failed to purge all monitor DB state");
-      await cmd.editReply({ content: "Failed to purge all monitor DB state." });
-      return;
-    }
-
-    await sendMonitorLog(
-      this.client,
-      config.log_channel_id,
-      `DB purged for ALL connections by ${cmd.user.username}`,
-    );
-    await cmd.editReply({ content: "Purged DB for all connections." });
+    await this.ensurePanelSent(guildId, config);
+    await cmd.editReply({ content: "Panel refreshed." });
   }
 
   private buildPanelConnectionsMeta(guildId: string, config: MonitorsConfig): PanelConnectionMeta[] {

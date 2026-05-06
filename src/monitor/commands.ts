@@ -1,5 +1,4 @@
 import {
-  ChannelType,
   InteractionContextType,
   PermissionFlagsBits,
   REST,
@@ -16,100 +15,26 @@ export async function registerSlashCommands(
 ): Promise<void> {
   const monitorCommand = new SlashCommandBuilder()
     .setName("monitor")
-    .setDescription("SNS monitor panel + connection management")
+    .setDescription("Monitor setup and management")
     .setContexts(InteractionContextType.Guild)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommandGroup((group) =>
-      group
-        .setName("config")
-        .setDescription("Server monitor configuration")
-        .addSubcommand((sub) =>
-          sub
-            .setName("setup")
-            .setDescription("Set up or update monitor channels and roles for this server")
-            .addChannelOption((opt) =>
-              opt
-                .setName("panel_channel")
-                .setDescription("Channel where the poll panel lives")
-                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                .setRequired(true),
-            )
-            .addChannelOption((opt) =>
-              opt
-                .setName("socials_channel")
-                .setDescription("Channel where approved posts are sent")
-                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                .setRequired(true),
-            )
-            .addRoleOption((opt) =>
-              opt
-                .setName("trigger_role")
-                .setDescription("Role required to click poll buttons (leave empty for anyone)")
-                .setRequired(false),
-            )
-            .addChannelOption((opt) =>
-              opt
-                .setName("log_channel")
-                .setDescription("Channel for monitor system logs (optional)")
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(false),
-            ),
-        )
-        .addSubcommand((sub) =>
-          sub
-            .setName("template")
-            .setDescription("Set post format and text template (opens a form)"),
-        )
-        .addSubcommand((sub) =>
-          sub.setName("show").setDescription("Show current monitor configuration"),
-        ),
-    )
-    .addSubcommandGroup((group) =>
-      group
-        .setName("connection")
-        .setDescription("Manage monitored social media accounts")
-        .addSubcommand((sub) =>
-          sub
-            .setName("add")
-            .setDescription("Add a social media account to monitor (opens a form)"),
-        )
-        .addSubcommand((sub) =>
-          sub
-            .setName("remove")
-            .setDescription("Remove a monitored social media account (opens a picker)"),
-        )
-        .addSubcommand((sub) =>
-          sub.setName("list").setDescription("List monitored social media accounts"),
-        ),
+    .addSubcommand((sub) =>
+      sub.setName("setup").setDescription("Open the interactive monitor setup panel"),
     )
     .addSubcommandGroup((group) =>
       group
         .setName("panel")
-        .setDescription("Panel setup and refresh")
-        .addSubcommand((sub) =>
-          sub.setName("setup").setDescription("Post/pin the monitor panel embed in this channel"),
-        )
-        .addSubcommand((sub) =>
-          sub.setName("refresh").setDescription("Refresh the panel embed in this channel"),
-        ),
-    )
-    .addSubcommandGroup((group) =>
-      group
-        .setName("db")
-        .setDescription("Purge monitor DB data")
+        .setDescription("Panel management")
         .addSubcommand((sub) =>
           sub
-            .setName("purge-connection")
-            .setDescription("Purge cooldown + seen-post data for one connection (opens a picker)"),
-        )
-        .addSubcommand((sub) =>
-          sub.setName("purge-all").setDescription("Purge all cooldown + seen-post data"),
+            .setName("refresh")
+            .setDescription("Re-send or refresh the poll panel (use if the panel message was deleted)"),
         ),
     );
 
   const postCommand = new SlashCommandBuilder()
     .setName("post")
-    .setDescription("Post a message to the monitor channel")
+    .setDescription("Manually send a URL through the monitor review flow")
     .setContexts(InteractionContextType.Guild)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
@@ -154,6 +79,6 @@ export async function registerSlashCommands(
     });
     log.info("Slash commands registered");
   } catch (err) {
-    log.error(err, "Failed to register slash commands — monitor buttons will still work but slash commands may be unavailable");
+    log.error(err, "Failed to register slash commands");
   }
 }
