@@ -2,7 +2,7 @@ import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 import { MessageFlags, type MessageCreateOptions } from "discord.js";
-import { platformToString, type Platform, type PostData, type SnsMetadata } from "../platforms/base";
+import { platformToString, type PostData, type SnsMetadata } from "../platforms/base";
 import { itemsToMessageContents, KST_TIMEZONE } from "./discord";
 
 dayjs.extend(utc);
@@ -142,12 +142,12 @@ export function suppressLinksInTextExceptLast(text: string): string {
   
   if (urls.length === 0) return text;
   
-  const lastUrl = urls[urls.length - 1];
-  
+  const urlCount = urls.length;
+  let matchIndex = 0;
+
   return text.replace(urlRegex, (url) => {
-    if (url.startsWith('<') && url.endsWith('>')) return url;
-    // Don't wrap the last URL
-    if (url === lastUrl) return url;
+    const currentIndex = matchIndex++;
+    if (currentIndex === urlCount - 1) return url; // last occurrence — don't suppress
     return `<${url}>`;
   });
 }

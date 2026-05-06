@@ -60,11 +60,17 @@ export function getConnectionId(connection: Pick<Connection, "type" | "handle">)
   return `${connection.type}:${connection.handle}`;
 }
 
-export function findConnectionById(config: MonitorsConfig, connectionId: string): Connection | null {
+export function parseConnectionId(connectionId: string): { type: string; handle: string } | null {
   const colonIdx = connectionId.indexOf(":");
   if (colonIdx === -1) return null;
   const type = connectionId.slice(0, colonIdx);
   const handle = connectionId.slice(colonIdx + 1);
   if (!type || !handle) return null;
-  return config.connections.find((c) => c.type === type && c.handle === handle) ?? null;
+  return { type, handle };
+}
+
+export function findConnectionById(config: MonitorsConfig, connectionId: string): Connection | null {
+  const parts = parseConnectionId(connectionId);
+  if (!parts) return null;
+  return config.connections.find((c) => c.type === parts.type && c.handle === parts.handle) ?? null;
 }

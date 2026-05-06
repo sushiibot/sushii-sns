@@ -1,6 +1,7 @@
+import { z } from "zod";
 import { Database } from "bun:sqlite";
 import logger from "../../logger";
-import { MonitorsConfig, type Connection, type ConnectionType } from "../config";
+import { MonitorsConfig, ConnectionTypeSchema, parseConnectionId, type Connection } from "../config";
 import { METADATA_MIGRATIONS } from "./schema";
 
 const log = logger.child({ module: "monitor/db" });
@@ -42,15 +43,7 @@ export function openMetadataDb(path: string): Database {
   return db;
 }
 
-/** Split "type:handle" into parts, returns null if malformed. */
-function splitConnectionId(connectionId: string): { type: string; handle: string } | null {
-  const idx = connectionId.indexOf(":");
-  if (idx === -1) return null;
-  const type = connectionId.slice(0, idx);
-  const handle = connectionId.slice(idx + 1);
-  if (!type || !handle) return null;
-  return { type, handle };
-}
+const FormatSchema = z.enum(["links", "inline"]);
 
 // ---------------------------------------------------------------------------
 // Config — guild_settings + monitors
@@ -91,12 +84,22 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     )
     .all(guildId);
 
-  const connections: Connection[] = rows.map((r) => ({
-    type: r.type as ConnectionType,
-    handle: r.handle,
-    cooldown_seconds: r.cooldown_seconds,
-    profile_name: r.profile_name ?? null,
-  }));
+  const connections: Connection[] = rows.flatMap((r) => {
+    const typeParsed = ConnectionTypeSchema.safeParse(r.type);
+    if (!typeParsed.success) {
+      log.warn({ type: r.type, handle: r.handle }, "Skipping monitor row with unknown type");
+      return [];
+    }
+    return [{
+      type: typeParsed.data,
+      handle: r.handle,
+      cooldown_seconds: r.cooldown_seconds,
+      profile_name: r.profile_name ?? null,
+    }];
+  });
+
+  const formatParsed = FormatSchema.safeParse(settings.format);
+  const format = formatParsed.success ? formatParsed.data : "inline";
 
   return new MonitorsConfig({
     panel_channel_id: settings.panel_channel_id,
@@ -104,7 +107,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     socials_channel_id: settings.socials_channel_id,
     trigger_role_id: settings.trigger_role_id ?? null,
     log_channel_id: settings.log_channel_id ?? null,
-    format: settings.format as "links" | "inline",
+    format,
     template: settings.template,
     connections,
   });
@@ -160,7 +163,8 @@ export function addMonitor(db: Database, guildId: string, connection: Connection
     `INSERT INTO monitors (guild_id, type, handle, cooldown_seconds, profile_name)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(guild_id, type, handle) DO UPDATE SET
-       cooldown_seconds = excluded.cooldown_seconds`,
+       cooldown_seconds = excluded.cooldown_seconds,
+       profile_name     = excluded.profile_name`,
   ).run(guildId, connection.type, connection.handle, connection.cooldown_seconds, connection.profile_name ?? null);
 }
 
@@ -170,7 +174,7 @@ export function setConnectionProfileName(
   connectionId: string,
   profileName: string | null,
 ): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
@@ -193,7 +197,7 @@ export function getConnectionMeta(
   guildId: string,
   connectionId: string,
 ): LastFetch | null {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return null;
 
   const row = db
@@ -214,7 +218,7 @@ export function upsertConnectionMeta(
   lastFetchedAt: number,
   lastFetchedBy: string,
 ): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
@@ -224,7 +228,7 @@ export function upsertConnectionMeta(
 }
 
 export function purgeConnectionMeta(db: Database, guildId: string, connectionId: string): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
@@ -249,7 +253,7 @@ export function isPostSeen(
   connectionId: string,
   postId: string,
 ): boolean {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return false;
 
   const row = db
@@ -267,7 +271,7 @@ export function markPostSeen(
   connectionId: string,
   postId: string,
 ): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
@@ -282,7 +286,7 @@ export function checkIfPostWasPublished(
   connectionId: string,
   postId: string,
 ): PostPostedCheck {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return { wasPosted: false, messageId: null };
 
   const row = db
@@ -304,7 +308,7 @@ export function upsertPostedMessageTracking(
   postId: string,
   discordMessageId: string,
 ): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
@@ -321,7 +325,7 @@ export function purgeConnectionSeenPosts(
   guildId: string,
   connectionId: string,
 ): void {
-  const parts = splitConnectionId(connectionId);
+  const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.query(
