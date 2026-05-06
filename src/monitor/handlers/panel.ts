@@ -29,7 +29,7 @@ const NOT_CONFIGURED_MSG =
 function getDisplayName(interaction: ButtonInteraction): string {
   const member = interaction.member;
   if (member instanceof GuildMember) return member.displayName;
-  return interaction.user.displayName ?? interaction.user.username;
+  return interaction.user.displayName;
 }
 
 export class PanelHandler {
@@ -82,8 +82,11 @@ export class PanelHandler {
         return;
       }
 
-      const roles = "cache" in member.roles ? member.roles.cache : null;
-      if (!roles || !roles.has(config.trigger_role_id)) {
+      const hasRole =
+        member instanceof GuildMember
+          ? member.roles.cache.has(config.trigger_role_id)
+          : Array.isArray(member.roles) && member.roles.includes(config.trigger_role_id);
+      if (!hasRole) {
         await interaction.reply({
           content: "You don't have the required role to poll.",
           flags: MessageFlags.Ephemeral,

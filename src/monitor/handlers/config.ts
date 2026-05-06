@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import logger from "../../logger";
 import type { ConnectionType } from "../config";
+import { ConnectionTypeSchema } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import type { GuildChannelSettings } from "../data/queries";
 import {
@@ -45,11 +46,11 @@ const DEFAULT_COOLDOWN_SECONDS = 300;
 function parseProfileUrl(url: string): { type: ConnectionType; handle: string } | null {
   const ig = url.match(/instagram\.com\/([A-Za-z0-9_.]+)/);
   if (ig && !["p", "reel", "reels", "stories", "explore"].includes(ig[1])) {
-    return { type: "instagram", handle: ig[1].replace(/\/$/, "") };
+    return { type: "instagram", handle: ig[1].replace(/[\/.]+$/, "") };
   }
 
   const tt = url.match(/tiktok\.com\/@([A-Za-z0-9_.]+)/);
-  if (tt) return { type: "tiktok", handle: tt[1].replace(/\/$/, "") };
+  if (tt) return { type: "tiktok", handle: tt[1].replace(/[\/.]+$/, "") };
 
   const tw = url.match(/(?:twitter|x)\.com\/([A-Za-z0-9_]+)/);
   if (tw && !["i", "home", "explore", "notifications", "messages"].includes(tw[1])) {
@@ -205,8 +206,14 @@ export class ConfigHandler {
       await interaction.reply({ content: "Invalid connection ID.", flags: MessageFlags.Ephemeral });
       return;
     }
-    const type = connectionId.slice(0, colonIdx);
+    const rawType = connectionId.slice(0, colonIdx);
     const handle = connectionId.slice(colonIdx + 1);
+    const typeParsed = ConnectionTypeSchema.safeParse(rawType);
+    if (!typeParsed.success) {
+      await interaction.reply({ content: "Invalid connection type.", flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const type: ConnectionType = typeParsed.data;
 
     try {
       this.repo.removeMonitor(guildId, type, handle);
