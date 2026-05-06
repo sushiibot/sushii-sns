@@ -303,7 +303,7 @@ export function buildTemplateModal(config: MonitorsConfig, nonce: string): Modal
     .setCustomId("template")
     .setLabel("Post text template (leave blank for default)")
     .setStyle(TextInputStyle.Paragraph)
-    .setValue(config.storedTemplate)
+    .setValue(config.template)
     .setRequired(false)
     .setMaxLength(2000);
 

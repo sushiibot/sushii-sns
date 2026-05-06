@@ -52,11 +52,6 @@ export class MonitorsConfig {
     if (this.rawTemplate) return this.rawTemplate;
     return this.format === "links" ? DEFAULT_LINKS_TEMPLATE : DEFAULT_INLINE_TEMPLATE;
   }
-
-  /** Returns the raw stored template value (empty string if none stored). Use for UI pre-fills. */
-  get storedTemplate(): string {
-    return this.rawTemplate;
-  }
 }
 
 export function getConnectionId(connection: Pick<Connection, "type" | "handle">): string {
