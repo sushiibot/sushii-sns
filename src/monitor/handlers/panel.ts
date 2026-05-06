@@ -1,3 +1,4 @@
+import { RESTJSONErrorCodes } from "discord-api-types/v10";
 import {
   GuildMember,
   MessageFlags,
@@ -22,7 +23,6 @@ import type { ReviewStore } from "../service/review/store";
 
 const log = logger.child({ module: "monitor/handlers/panel" });
 
-const DISCORD_UNKNOWN_MESSAGE = 10008;
 
 const NOT_CONFIGURED_MSG =
   "Monitor is not configured for this server. Use `/monitor setup` to get started.";
@@ -154,7 +154,7 @@ export class PanelHandler {
       await msg.edit(embedData);
     } catch (err) {
       const isUnknownMessage =
-        (err as any)?.code === DISCORD_UNKNOWN_MESSAGE ||
+        (err as any)?.code === RESTJSONErrorCodes.UnknownMessage ||
         (err instanceof Error && err.message.includes("Unknown Message"));
       if (isUnknownMessage) {
         log.warn({ err }, "Panel message not found or deleted, skipping embed refresh");
