@@ -90,87 +90,110 @@ export function buildSettingsPage(
 
   const container = new ContainerBuilder();
 
-  // --- Header / current state ---
-  let header = "## 📋 Monitor Setup — Settings\n";
-
+  // --- Header ---
+  let header = "## 📋 Monitor Setup — Settings";
   if (!eff.panel_channel_id || !eff.socials_channel_id) {
-    header += "\n> Select a **Panel channel** and a **Socials channel** below to get started.";
+    header += "\n\n> Select a **Panel channel** and a **Socials channel** below to get started.";
     if (eff.panel_channel_id && !eff.socials_channel_id) {
       header += `\n> Panel channel set to <#${eff.panel_channel_id}>. Now select the socials channel.`;
     }
-  } else {
-    header += `\n📡 **Panel channel:** <#${eff.panel_channel_id}>`;
-    header += `\n📢 **Socials channel:** <#${eff.socials_channel_id}>`;
-    header += `\n🔒 **Allowed role:** ${eff.trigger_role_id ? `<@&${eff.trigger_role_id}>` : "_Anyone_"}`;
-    header += `\n📋 **Log channel:** ${eff.log_channel_id ? `<#${eff.log_channel_id}>` : "_None_"}`;
-    header += `\n📝 **Post format:** \`${eff.format}\``;
-    const tmpl = eff.template;
-    header += `\n💬 **Template:** ${tmpl ? `\`${tmpl.length > 60 ? tmpl.slice(0, 60) + "…" : tmpl}\`` : "_empty_"}`;
   }
-
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(header));
 
-  // --- Channels ---
+  // --- Panel channel ---
   container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("**Channels**"),
+    new TextDisplayBuilder().setContent(
+      `📡 **Panel channel:** ${eff.panel_channel_id ? `<#${eff.panel_channel_id}>` : "_Not set_"}`,
+    ),
   );
-
-  const panelChannelSelect = new ChannelSelectMenuBuilder()
-    .setCustomId(SETUP_PANEL_CHANNEL_SELECT)
-    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-    .setDefaultChannels(eff.panel_channel_id ? [eff.panel_channel_id] : [])
-    .setPlaceholder("Panel channel (where the poll panel lives)")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .setDisabled(disabled);
-
   container.addActionRowComponents(
-    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(panelChannelSelect),
+    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+      new ChannelSelectMenuBuilder()
+        .setCustomId(SETUP_PANEL_CHANNEL_SELECT)
+        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setDefaultChannels(eff.panel_channel_id ? [eff.panel_channel_id] : [])
+        .setPlaceholder("Panel channel (where the poll panel lives)")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(disabled),
+    ),
   );
 
-  const socialsChannelSelect = new ChannelSelectMenuBuilder()
-    .setCustomId(SETUP_SOCIALS_CHANNEL_SELECT)
-    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-    .setDefaultChannels(eff.socials_channel_id ? [eff.socials_channel_id] : [])
-    .setPlaceholder("Socials channel (where approved posts are sent)")
-    .setMinValues(1)
-    .setMaxValues(1)
-    .setDisabled(disabled);
-
-  container.addActionRowComponents(
-    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(socialsChannelSelect),
-  );
-
-  // --- Optional settings ---
+  // --- Socials channel ---
   container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
   container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent("**Optional Settings**"),
+    new TextDisplayBuilder().setContent(
+      `📢 **Socials channel:** ${eff.socials_channel_id ? `<#${eff.socials_channel_id}>` : "_Not set_"}`,
+    ),
+  );
+  container.addActionRowComponents(
+    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+      new ChannelSelectMenuBuilder()
+        .setCustomId(SETUP_SOCIALS_CHANNEL_SELECT)
+        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+        .setDefaultChannels(eff.socials_channel_id ? [eff.socials_channel_id] : [])
+        .setPlaceholder("Socials channel (where approved posts are sent)")
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(disabled),
+    ),
   );
 
-  const triggerRoleSelect = new RoleSelectMenuBuilder()
-    .setCustomId(SETUP_TRIGGER_ROLE_SELECT)
-    .setDefaultRoles(eff.trigger_role_id ? [eff.trigger_role_id] : [])
-    .setPlaceholder("Allowed role — leave empty to allow anyone to poll")
-    .setMinValues(0)
-    .setMaxValues(1)
-    .setDisabled(disabled);
-
+  // --- Allowed role ---
+  container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `🔒 **Allowed role:** ${eff.trigger_role_id ? `<@&${eff.trigger_role_id}>` : "_Anyone_"}`,
+    ),
+  );
   container.addActionRowComponents(
-    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(triggerRoleSelect),
+    new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(
+      new RoleSelectMenuBuilder()
+        .setCustomId(SETUP_TRIGGER_ROLE_SELECT)
+        .setDefaultRoles(eff.trigger_role_id ? [eff.trigger_role_id] : [])
+        .setPlaceholder("Allowed role — leave empty to allow anyone to poll")
+        .setMinValues(0)
+        .setMaxValues(1)
+        .setDisabled(disabled),
+    ),
   );
 
-  const logChannelSelect = new ChannelSelectMenuBuilder()
-    .setCustomId(SETUP_LOG_CHANNEL_SELECT)
-    .setChannelTypes(ChannelType.GuildText)
-    .setDefaultChannels(eff.log_channel_id ? [eff.log_channel_id] : [])
-    .setPlaceholder("Log channel — optional system logs")
-    .setMinValues(0)
-    .setMaxValues(1)
-    .setDisabled(disabled);
-
+  // --- Log channel ---
+  container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `📋 **Log channel:** ${eff.log_channel_id ? `<#${eff.log_channel_id}>` : "_None_"}`,
+    ),
+  );
   container.addActionRowComponents(
-    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(logChannelSelect),
+    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+      new ChannelSelectMenuBuilder()
+        .setCustomId(SETUP_LOG_CHANNEL_SELECT)
+        .setChannelTypes(ChannelType.GuildText)
+        .setDefaultChannels(eff.log_channel_id ? [eff.log_channel_id] : [])
+        .setPlaceholder("Log channel — optional system logs")
+        .setMinValues(0)
+        .setMaxValues(1)
+        .setDisabled(disabled),
+    ),
+  );
+
+  // --- Template & format ---
+  container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
+
+  const formatDesc =
+    eff.format === "inline"
+      ? "inline — media uploaded as Discord file attachments"
+      : "links — media posted as URLs, Discord auto-embeds them";
+  const tmpl = eff.template;
+  const tmplPreview = tmpl
+    ? `\`\`\`\n${tmpl.length > 120 ? tmpl.slice(0, 120) + "…" : tmpl}\n\`\`\``
+    : "_Using default template — click Edit to customise._";
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `💬 **Template** · 📝 ${formatDesc}\n${tmplPreview}`,
+    ),
   );
 
   // --- Action buttons ---
@@ -290,12 +313,12 @@ export function buildTemplateModal(config: MonitorsConfig, nonce: string): Modal
       new StringSelectMenuOptionBuilder()
         .setLabel("Inline")
         .setValue("inline")
-        .setDescription("Embed media directly in the message")
+        .setDescription("Upload media as Discord file attachments")
         .setDefault(config.format === "inline"),
       new StringSelectMenuOptionBuilder()
         .setLabel("Links")
         .setValue("links")
-        .setDescription("Post the original URLs only")
+        .setDescription("Post media as URLs — Discord auto-embeds them")
         .setDefault(config.format === "links"),
     );
 
