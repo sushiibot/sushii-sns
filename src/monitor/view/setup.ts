@@ -19,6 +19,7 @@ import {
 } from "discord.js";
 import type { MonitorsConfig } from "../config";
 import { getConnectionId } from "../config";
+import { DEFAULT_INLINE_TEMPLATE, DEFAULT_LINKS_TEMPLATE } from "../../utils/template";
 import type { GuildChannelSettings } from "../data/queries";
 
 // ---------------------------------------------------------------------------
@@ -184,12 +185,12 @@ export function buildSettingsPage(
 
   const formatDesc =
     eff.format === "inline"
-      ? "inline — media uploaded as Discord file attachments"
-      : "links — media posted as URLs, Discord auto-embeds them";
-  const tmpl = eff.template;
-  const tmplPreview = tmpl
-    ? `\`\`\`\n${tmpl.length > 120 ? tmpl.slice(0, 120) + "…" : tmpl}\n\`\`\``
-    : "_Using default template — click Edit to customise._";
+      ? "Attach media files"
+      : "Links to media files";
+  const effectiveTemplate =
+    eff.template ||
+    (eff.format === "links" ? DEFAULT_LINKS_TEMPLATE : DEFAULT_INLINE_TEMPLATE);
+  const tmplPreview = `\`\`\`\n${effectiveTemplate.length > 120 ? effectiveTemplate.slice(0, 120) + "…" : effectiveTemplate}\n\`\`\``;
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
       `💬 **Template** · 📝 ${formatDesc}\n${tmplPreview}`,
@@ -311,14 +312,14 @@ export function buildTemplateModal(config: MonitorsConfig, nonce: string): Modal
     .setPlaceholder("Select post format")
     .addOptions(
       new StringSelectMenuOptionBuilder()
-        .setLabel("Inline")
+        .setLabel("Attach media files")
         .setValue("inline")
-        .setDescription("Upload media as Discord file attachments")
+        .setDescription("Media sent as file attachments on the message")
         .setDefault(config.format === "inline"),
       new StringSelectMenuOptionBuilder()
-        .setLabel("Links")
+        .setLabel("Links to media files")
         .setValue("links")
-        .setDescription("Post media as URLs — Discord auto-embeds them")
+        .setDescription("Media uploaded to Discord CDN, posted as embeddable links")
         .setDefault(config.format === "links"),
     );
 
