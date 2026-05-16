@@ -1,72 +1,72 @@
-// Breaking change from pre-v1 schema — delete data.db when upgrading.
-// Each entry is an array of SQL statements for that migration version.
-// On startup, runMigrations applies pending migrations in order and updates PRAGMA user_version.
+import { foreignKey, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const METADATA_MIGRATIONS: string[][] = [
-  // Migration 0 — multi-guild schema
-  [
+export const guildSettings = sqliteTable("guild_settings", {
+  guildId: text("guild_id").notNull().primaryKey(),
+  panelChannelId: text("panel_channel_id").notNull(),
+  panelMessageId: text("panel_message_id"),
+  socialsChannelId: text("socials_channel_id").notNull(),
+  triggerRoleId: text("trigger_role_id"),
+  logChannelId: text("log_channel_id"),
+  format: text("format").notNull().default("inline"),
+  template: text("template").notNull().default(""),
+});
 
-    `CREATE TABLE IF NOT EXISTS guild_settings (
-      guild_id TEXT NOT NULL PRIMARY KEY,
-      panel_channel_id TEXT NOT NULL,
-      panel_message_id TEXT,
-      socials_channel_id TEXT NOT NULL,
-      trigger_role_id TEXT,
-      log_channel_id TEXT,
-      format TEXT NOT NULL DEFAULT 'inline',
-      template TEXT NOT NULL DEFAULT ''
-    )`,
-
-    `CREATE TABLE IF NOT EXISTS monitors (
-      guild_id TEXT NOT NULL REFERENCES guild_settings(guild_id) ON DELETE CASCADE,
-      type TEXT NOT NULL,
-      handle TEXT NOT NULL,
-      ig_id TEXT,
-      cooldown_seconds INTEGER NOT NULL DEFAULT 300,
-      last_fetched_at INTEGER,
-      last_fetched_by TEXT,
-      PRIMARY KEY (guild_id, type, handle)
-    )`,
-
-    `CREATE TABLE IF NOT EXISTS posts (
-      guild_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      handle TEXT NOT NULL,
-      post_id TEXT NOT NULL,
-      seen_at INTEGER NOT NULL,
-      posted_message_id TEXT,
-      PRIMARY KEY (guild_id, type, handle, post_id),
-      FOREIGN KEY (guild_id, type, handle) REFERENCES monitors(guild_id, type, handle) ON DELETE CASCADE
-    )`,
+export const monitors = sqliteTable(
+  "monitors",
+  {
+    guildId: text("guild_id").notNull(),
+    type: text("type").notNull(),
+    handle: text("handle").notNull(),
+    igId: text("ig_id"),
+    lastFetchedAt: integer("last_fetched_at"),
+    lastFetchedBy: text("last_fetched_by"),
+    profileName: text("profile_name"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.guildId, table.type, table.handle] }),
+    foreignKey({
+      columns: [table.guildId],
+      foreignColumns: [guildSettings.guildId],
+    }).onDelete("cascade"),
   ],
+);
 
-  // Migration 1 — profile display name cache
-  [
-    `ALTER TABLE monitors ADD COLUMN profile_name TEXT`,
+export const posts = sqliteTable(
+  "posts",
+  {
+    guildId: text("guild_id").notNull(),
+    type: text("type").notNull(),
+    handle: text("handle").notNull(),
+    postId: text("post_id").notNull(),
+    seenAt: integer("seen_at").notNull(),
+    postedMessageId: text("posted_message_id"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.guildId, table.type, table.handle, table.postId] }),
+    foreignKey({
+      columns: [table.guildId, table.type, table.handle],
+      foreignColumns: [monitors.guildId, monitors.type, monitors.handle],
+    }).onDelete("cascade"),
   ],
+);
 
-  // Migration 2 — remove per-connection cooldown (hardcoded in handler)
-  [
-    `ALTER TABLE monitors DROP COLUMN cooldown_seconds`,
-  ],
-
-  // Migration 3 — persistent pending reviews (replaces in-memory ReviewStore)
-  [
-    `CREATE TABLE IF NOT EXISTS pending_reviews (
-      review_id          TEXT PRIMARY KEY,
-      guild_id           TEXT NOT NULL,
-      connection_id      TEXT NOT NULL,
-      post_id            TEXT NOT NULL,
-      message_ids        TEXT NOT NULL DEFAULT '[]',
-      file_names         TEXT NOT NULL DEFAULT '[]',
-      removed_indices    TEXT NOT NULL DEFAULT '[]',
-      custom_content     TEXT,
-      rendered_content   TEXT NOT NULL,
-      socials_channel_id TEXT NOT NULL,
-      format             TEXT NOT NULL,
-      template           TEXT NOT NULL,
-      fetcher_user_id    TEXT NOT NULL,
-      created_at         INTEGER NOT NULL
-    )`,
-  ],
-];
+export const pendingReviews = sqliteTable("pending_reviews", {
+  reviewId: text("review_id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  connectionId: text("connection_id").notNull(),
+  postId: text("post_id").notNull(),
+  postUrl: text("post_url").notNull(),
+  platform: text("platform").notNull(),
+  username: text("username").notNull().default(""),
+  originalText: text("original_text").notNull().default(""),
+  messageIds: text("message_ids").notNull().default("[]"),
+  fileNames: text("file_names").notNull().default("[]"),
+  removedIndices: text("removed_indices").notNull().default("[]"),
+  customContent: text("custom_content"),
+  renderedContent: text("rendered_content").notNull(),
+  socialsChannelId: text("socials_channel_id").notNull(),
+  format: text("format").notNull(),
+  template: text("template").notNull(),
+  fetcherUserId: text("fetcher_user_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+});

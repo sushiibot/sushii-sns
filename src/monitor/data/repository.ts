@@ -1,6 +1,7 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { Connection, MonitorsConfig, MonitorFormat } from "../config";
 import { FormatSchema } from "../config";
+import type { AnySnsMetadata, Platform } from "../../platforms/base";
 import logger from "../../logger";
 import type { PostTrackingSink } from "./postTracking";
 import {
@@ -60,10 +61,13 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
   return {
     postData: {
       postID: row.post_id,
-      username: "",
-      postLink: { url: "", metadata: { platform: row.connection_id.split(":")[0] } as any },
+      username: row.username,
+      postLink: {
+        url: row.post_url,
+        metadata: { platform: row.platform as Platform } as AnySnsMetadata,
+      },
       files: fileNames.map((name) => ({ ext: name.split(".").pop() || "bin", buffer: Buffer.alloc(0) })),
-      originalText: "",
+      originalText: row.original_text,
     },
     guildId: row.guild_id,
     connectionId: row.connection_id,

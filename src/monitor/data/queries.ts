@@ -425,6 +425,10 @@ export type PendingReviewRow = {
   guild_id: string;
   connection_id: string;
   post_id: string;
+  post_url: string;
+  platform: string;
+  username: string;
+  original_text: string;
   message_ids: string;      // JSON string array
   file_names: string;       // JSON string array
   removed_indices: string;  // JSON number array
@@ -442,6 +446,10 @@ export type PendingReviewInsert = {
   guildId: string;
   connectionId: string;
   postId: string;
+  postUrl: string;
+  platform: string;
+  username: string;
+  originalText: string;
   fileNames: string[];
   renderedContent: string;
   socialsChannelId: string;
@@ -457,6 +465,10 @@ export function insertPendingReview(db: BunSQLiteDatabase, r: PendingReviewInser
       guildId: r.guildId,
       connectionId: r.connectionId,
       postId: r.postId,
+      postUrl: r.postUrl,
+      platform: r.platform,
+      username: r.username,
+      originalText: r.originalText,
       fileNames: JSON.stringify(r.fileNames),
       customContent: null,
       renderedContent: r.renderedContent,
@@ -483,6 +495,10 @@ export function getPendingReview(db: BunSQLiteDatabase, reviewId: string): Pendi
     guild_id: row.guildId,
     connection_id: row.connectionId,
     post_id: row.postId,
+    post_url: row.postUrl,
+    platform: row.platform,
+    username: row.username,
+    original_text: row.originalText,
     message_ids: row.messageIds,
     file_names: row.fileNames,
     removed_indices: row.removedIndices,
