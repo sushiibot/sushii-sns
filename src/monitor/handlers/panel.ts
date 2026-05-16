@@ -180,6 +180,11 @@ export class PanelHandler {
         await msg.pin();
       } catch (err) {
         log.warn(err, "Failed to pin panel embed");
+        try {
+          await channel.send(`⚠️ Failed to auto-pin the panel message — please pin it manually: ${msg.url}`);
+        } catch (sendErr) {
+          log.warn(sendErr, "Failed to send pin-failure notice");
+        }
       }
 
       this.repo.updatePanelMessage(guildId, msg.id);
@@ -241,7 +246,13 @@ export class PanelHandler {
     }
 
     await this.ensurePanelSent(guildId, config);
-    await cmd.editReply(editSuccess("Panel refreshed."));
+
+    const updatedConfig = this.repo.getConfig(guildId);
+    const panelLink =
+      updatedConfig?.panel_message_id
+        ? ` https://discord.com/channels/${guildId}/${updatedConfig.panel_channel_id}/${updatedConfig.panel_message_id}`
+        : "";
+    await cmd.editReply(editSuccess(`Panel refreshed.${panelLink}`));
   }
 
   /**
