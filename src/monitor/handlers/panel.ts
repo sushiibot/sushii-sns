@@ -41,6 +41,7 @@ export class PanelHandler {
 
   private static readonly MAX_REVIEWS_PER_POLL = 3;
   private static readonly MAX_STORIES_PER_POLL = 10;
+  private static readonly POLL_COOLDOWN_MS = 30_000;
 
   constructor(
     private readonly repo: MonitorRepository,
@@ -84,7 +85,7 @@ export class PanelHandler {
           ? member.roles.cache.has(config.trigger_role_id)
           : Array.isArray(member.roles) && member.roles.includes(config.trigger_role_id);
       if (!hasRole) {
-        await interaction.reply(ephemeralError("You don't have the required role to poll."));
+        await interaction.reply(ephemeralError("You don't have the required role to do this."));
         return;
       }
     }
@@ -97,10 +98,10 @@ export class PanelHandler {
 
     const lastFetch = this.repo.getConnectionMeta(guildId, connectionId);
     if (lastFetch) {
-      const nextPollAt = lastFetch.last_fetched_at + connection.cooldown_seconds * 1000;
+      const nextPollAt = lastFetch.last_fetched_at + PanelHandler.POLL_COOLDOWN_MS;
       if (Date.now() < nextPollAt) {
         const nextPollSec = Math.floor(nextPollAt / 1000);
-        await interaction.reply(ephemeralWarn(`On cooldown. Next poll available <t:${nextPollSec}:R>.`));
+        await interaction.reply(ephemeralWarn(`On cooldown — you can refresh again <t:${nextPollSec}:R>.`));
         return;
       }
     }
@@ -221,7 +222,7 @@ export class PanelHandler {
       });
       await this.refreshPanelEmbed(guildId, config);
       await sendMonitorLog(this.client, config.log_channel_id, `/fetch-all completed by ${cmd.user.username}`);
-      await cmd.editReply(editSuccess("Finished polling all connections (items marked as seen). Monitor panel updated."));
+      await cmd.editReply(editSuccess("Finished refreshing all connections (items marked as seen). Monitor panel updated."));
     } catch (err) {
       log.error(err, "/fetch-all failed");
       await cmd.editReply(editError("Something went wrong while syncing."));
@@ -283,7 +284,6 @@ export class PanelHandler {
       return {
         connectionId: id,
         label: `${c.type}/${c.handle}`,
-        cooldownSeconds: c.cooldown_seconds,
         lastFetch: this.repo.getConnectionMeta(guildId, id),
       };
     });
@@ -319,7 +319,10 @@ export class PanelHandler {
 
     if (posts.length === 0) {
       this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
-      await interaction.editReply(editInfo("No new posts found."));
+      await interaction.editReply(editInfo(
+        "No new posts found.\n\n" +
+        "**Tip:** Only click Refresh once you've already gotten a notification in the app — that way you know there's actually something new to fetch.",
+      ));
       return;
     }
 

@@ -44,4 +44,9 @@ export const METADATA_MIGRATIONS: string[][] = [
   [
     `ALTER TABLE monitors ADD COLUMN profile_name TEXT`,
   ],
+
+  // Migration 2 — remove per-connection cooldown (hardcoded in handler)
+  [
+    `ALTER TABLE monitors DROP COLUMN cooldown_seconds`,
+  ],
 ];

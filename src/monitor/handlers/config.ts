@@ -70,7 +70,6 @@ export class ConfigHandler {
   private pendingSettings = new Map<string, Partial<GuildChannelSettings>>();
 
   private static readonly COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;
-  private static readonly DEFAULT_COOLDOWN_SECONDS = 300;
 
   constructor(
     private readonly repo: MonitorRepository,
@@ -395,7 +394,6 @@ export class ConfigHandler {
     const newConnection: Connection = {
       type: parsed.type,
       handle: parsed.handle,
-      cooldown_seconds: ConfigHandler.DEFAULT_COOLDOWN_SECONDS,
     };
 
     // Save first (posts table FK requires monitors row to exist)

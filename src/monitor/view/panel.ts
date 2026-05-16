@@ -17,7 +17,6 @@ const log = logger.child({ module: "monitor/view/panel" });
 export type PanelConnectionMeta = {
   connectionId: string;
   label: string;
-  cooldownSeconds: number;
   lastFetch: LastFetch | null;
 };
 
@@ -44,8 +43,6 @@ function typeToButtonStyle(connectionId: string): ButtonStyle {
 export function buildPanelEmbed(
   connections: PanelConnectionMeta[],
 ): PanelMessage {
-  const now = Math.floor(Date.now() / 1000);
-
   if (connections.length > 25) {
     log.warn(
       { count: connections.length },
@@ -58,7 +55,7 @@ export function buildPanelEmbed(
 
   container.addTextDisplayComponents(
     new TextDisplayBuilder().setContent(
-      "## 📡 SNS Monitor Panel\nClick a Poll button to fetch the latest posts for that connection.",
+      "## 📡 SNS Monitor Panel\nClick a Refresh button to check for new posts.",
     ),
   );
 
@@ -80,11 +77,9 @@ export function buildPanelEmbed(
       let statusLine: string;
       if (c.lastFetch) {
         const lastFetchedSec = Math.floor(c.lastFetch.last_fetched_at / 1000);
-        const nextFetchSec = lastFetchedSec + c.cooldownSeconds;
-        const nextPoll = now >= nextFetchSec ? "Now" : `<t:${nextFetchSec}:R>`;
-        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: <t:${lastFetchedSec}:R> by ${c.lastFetch.last_fetched_by} · Next poll: ${nextPoll}`;
+        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: <t:${lastFetchedSec}:R> by ${c.lastFetch.last_fetched_by}`;
       } else {
-        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: Never · Next poll: Now`;
+        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: Never`;
       }
 
       container.addTextDisplayComponents(

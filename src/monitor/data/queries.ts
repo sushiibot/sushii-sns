@@ -59,7 +59,6 @@ type GuildSettingsRow = {
 type MonitorRow = {
   type: string;
   handle: string;
-  cooldown_seconds: number;
   profile_name: string | null;
 };
 
@@ -76,7 +75,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
 
   const rows = db
     .query<MonitorRow, [string]>(
-      `SELECT type, handle, cooldown_seconds, profile_name
+      `SELECT type, handle, profile_name
        FROM monitors WHERE guild_id = ? ORDER BY type, handle`,
     )
     .all(guildId);
@@ -90,7 +89,6 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     return [{
       type: typeParsed.data,
       handle: r.handle,
-      cooldown_seconds: r.cooldown_seconds,
       profile_name: r.profile_name ?? null,
     }];
   });
@@ -157,12 +155,11 @@ export function updatePanelMessage(db: Database, guildId: string, messageId: str
 
 export function addMonitor(db: Database, guildId: string, connection: Connection): void {
   db.query(
-    `INSERT INTO monitors (guild_id, type, handle, cooldown_seconds, profile_name)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO monitors (guild_id, type, handle, profile_name)
+     VALUES (?, ?, ?, ?)
      ON CONFLICT(guild_id, type, handle) DO UPDATE SET
-       cooldown_seconds = excluded.cooldown_seconds,
-       profile_name     = excluded.profile_name`,
-  ).run(guildId, connection.type, connection.handle, connection.cooldown_seconds, connection.profile_name ?? null);
+       profile_name = excluded.profile_name`,
+  ).run(guildId, connection.type, connection.handle, connection.profile_name ?? null);
 }
 
 export function setConnectionProfileName(
