@@ -1,7 +1,13 @@
 import {
   ActionRowBuilder,
+  ContainerBuilder,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
   MessageFlags,
   ModalBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
   TextInputBuilder,
   TextInputStyle,
   type ButtonInteraction,
@@ -12,40 +18,21 @@ import {
   type TextBasedChannel,
 } from "discord.js";
 import logger from "../../logger";
-import { MediaTooLargeError, sendPostToChannel, type SendPostResult } from "../../utils/discord";
-import { buildReviewBatches, buildReviewStatusEditOptions } from "../view/review";
+import { buildReviewBatches, buildReviewLastBatchStatusEdit } from "../view/review";
 import type { PostQueue } from "../service/queue";
 import type { MonitorRepository } from "../data/repository";
 import {
   REVIEW_MODAL_PREFIX,
   type ReviewState,
 } from "../service/review/types";
-import type { ReviewStore } from "../service/review/store";
 import { ephemeralError } from "../view/ephemeral";
 
 const log = logger.child({ module: "monitor/handlers/review" });
 
-const CLEANUP_DELAY_MS = 5_000;
-
 const TEXT_ONLY_PLATFORMS = new Set(["twitter"]);
-
-async function editStatusMessage(
-  channel: TextBasedChannel,
-  msgId: string | undefined,
-  text: string,
-): Promise<void> {
-  if (!msgId) return;
-  try {
-    const msg = await channel.messages.fetch(msgId);
-    await msg.edit(buildReviewStatusEditOptions(text));
-  } catch (err) {
-    log.warn({ err, msgId }, "Failed to edit review status message");
-  }
-}
 
 export class ReviewHandler {
   constructor(
-    private readonly reviewStore: ReviewStore,
     private readonly postQueue: PostQueue,
     private readonly repo: MonitorRepository,
   ) {}
@@ -63,7 +50,7 @@ export class ReviewHandler {
     interaction: StringSelectMenuInteraction,
     reviewId: string,
   ): Promise<void> {
-    const state = this.reviewStore.get(reviewId);
+    const state = this.repo.getPendingReview(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
       await interaction.deferUpdate();
@@ -77,10 +64,10 @@ export class ReviewHandler {
 
     await interaction.deferUpdate();
 
-    const removedIndices = new Set(interaction.values.map(Number).filter(n => !isNaN(n)));
-    this.reviewStore.update(reviewId, { removedIndices });
+    const removedIndices = interaction.values.map(Number).filter(n => !isNaN(n));
+    this.repo.updatePendingReview(reviewId, { removedIndices });
 
-    const updatedState = this.reviewStore.get(reviewId);
+    const updatedState = this.repo.getPendingReview(reviewId);
     if (!updatedState) return; // deleted between get and update
 
     const channel = interaction.channel;
@@ -93,7 +80,7 @@ export class ReviewHandler {
     interaction: ButtonInteraction,
     reviewId: string,
   ): Promise<void> {
-    const state = this.reviewStore.get(reviewId);
+    const state = this.repo.getPendingReview(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
       await interaction.reply(ephemeralError("This review has expired."));
@@ -126,7 +113,7 @@ export class ReviewHandler {
     interaction: ModalSubmitInteraction,
     reviewId: string,
   ): Promise<void> {
-    const state = this.reviewStore.get(reviewId);
+    const state = this.repo.getPendingReview(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
       await interaction.reply(ephemeralError("This review has expired."));
@@ -148,9 +135,9 @@ export class ReviewHandler {
       return;
     }
 
-    this.reviewStore.update(reviewId, { customContent });
+    this.repo.updatePendingReview(reviewId, { customContent });
 
-    const updatedState = this.reviewStore.get(reviewId);
+    const updatedState = this.repo.getPendingReview(reviewId);
     if (!updatedState) return; // deleted between get and update
 
     const channel = interaction.channel;
@@ -163,7 +150,7 @@ export class ReviewHandler {
     interaction: ButtonInteraction,
     reviewId: string,
   ): Promise<void> {
-    const state = this.reviewStore.get(reviewId);
+    const state = this.repo.getPendingReview(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
       await interaction.reply(ephemeralError("This review has expired."));
@@ -187,7 +174,7 @@ export class ReviewHandler {
     // Delete synchronously before any await so a second rapid click finds no
     // state and hits the early return, preventing double-posts.
     // The captured `state` variable remains valid for the rest of the method.
-    this.reviewStore.delete(reviewId);
+    this.repo.deletePendingReview(reviewId);
 
     await interaction.deferUpdate();
 
@@ -197,9 +184,17 @@ export class ReviewHandler {
       return;
     }
 
+    // Immediately replace buttons with a disabled "Posting..." indicator so
+    // the message stays readable while the queue job runs.
     const lastMsgId = state.messageIds[state.messageIds.length - 1];
-
-    await editStatusMessage(reviewChannel, lastMsgId, "⏳ Posting...");
+    if (lastMsgId) {
+      try {
+        const lastMsg = await reviewChannel.messages.fetch(lastMsgId);
+        await lastMsg.edit(buildReviewLastBatchStatusEdit(state, "⏳ Posting..."));
+      } catch (err) {
+        log.warn({ err, lastMsgId }, "Failed to set posting status on review message");
+      }
+    }
 
     // The actual posting happens asynchronously via the queue.
     // Status is updated directly in the review channel messages.
@@ -221,7 +216,7 @@ export class ReviewHandler {
     interaction: ButtonInteraction,
     reviewId: string,
   ): Promise<void> {
-    const state = this.reviewStore.get(reviewId);
+    const state = this.repo.getPendingReview(reviewId);
     if (!state) {
       log.warn({ reviewId }, "Review not found");
       await interaction.reply(ephemeralError("This review has expired."));
@@ -235,39 +230,19 @@ export class ReviewHandler {
 
     await interaction.deferUpdate();
 
-    this.reviewStore.delete(reviewId);
+    this.repo.deletePendingReview(reviewId);
 
     const reviewChannel = interaction.channel;
     if (!reviewChannel || !reviewChannel.isTextBased()) return;
 
     const lastMsgId = state.messageIds[state.messageIds.length - 1];
 
-    await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
-
-    await editStatusMessage(reviewChannel, lastMsgId, "⏭️ Skipped");
-
-    if (lastMsgId) {
-      // Intentional fire-and-forget: 5s delay is short and catch prevents noise
-      // if the bot shuts down before the timer fires.
-      setTimeout(async () => {
-        try {
-          await reviewChannel.messages.delete(lastMsgId);
-        } catch {
-          // Already deleted
-        }
-      }, CLEANUP_DELAY_MS);
+    for (const msgId of state.messageIds) {
+      try { await reviewChannel.messages.delete(msgId); } catch { /* already gone */ }
     }
   }
 
-  private async deleteReviewMediaMessages(
-    channel: TextBasedChannel,
-    messageIds: string[],
-  ): Promise<void> {
-    for (let i = 0; i < messageIds.length - 1; i++) {
-      const msgId = messageIds[i];
-      try { await channel.messages.delete(msgId); } catch { /* already gone */ }
-    }
-  }
+
 
   private async editReviewMessages(
     channel: TextBasedChannel,
@@ -292,6 +267,22 @@ export class ReviewHandler {
     }
   }
 
+  private async updateLastBatchStatus(
+    channel: TextBasedChannel,
+    state: ReviewState,
+    lastMsgId: string | undefined,
+    statusText: string,
+    postedUrl?: string,
+  ): Promise<void> {
+    if (!lastMsgId) return;
+    try {
+      const msg = await channel.messages.fetch(lastMsgId);
+      await msg.edit(buildReviewLastBatchStatusEdit(state, statusText, postedUrl));
+    } catch (err) {
+      log.warn({ err, lastMsgId }, "Failed to update review status");
+    }
+  }
+
   private async postReviewToSocials(
     state: ReviewState,
     reviewId: string,
@@ -303,73 +294,87 @@ export class ReviewHandler {
     try {
       const channel = await interaction.client.channels.fetch(state.socialsChannelId);
       if (!channel || !channel.isSendable()) {
-        // Clean up media batch messages so channel isn't cluttered
-        await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
-        await editStatusMessage(reviewChannel, lastMsgId, "❌ Failed - channel not sendable");
+        await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "❌ Failed — channel not sendable");
         return;
       }
 
-      const filteredPostData = { ...state.postData, files: filteredFiles };
+      // Collect CDN attachment URLs from the review messages (fetching refreshes signed URLs).
+      // Map: file index → CDN URL, extracted from attachment filenames like "media-0.jpg".
+      const attachmentUrlMap = new Map<number, string>();
+      for (const msgId of state.messageIds) {
+        try {
+          const msg = await reviewChannel.messages.fetch(msgId);
+          for (const att of msg.attachments.values()) {
+            const match = att.name?.match(/^media-(\d+)\./);
+            if (match) {
+              attachmentUrlMap.set(parseInt(match[1], 10), att.url);
+            }
+          }
+        } catch (err) {
+          log.warn({ err, msgId }, "Failed to fetch review message for CDN URLs");
+        }
+      }
 
-      let result: SendPostResult;
+      const keptUrls: string[] = [];
+      for (let i = 0; i < state.fileNames.length; i++) {
+        if (!state.removedIndices.has(i)) {
+          const url = attachmentUrlMap.get(i);
+          if (url) keptUrls.push(url);
+        }
+      }
+
+      const content = state.customContent ?? state.renderedContent;
+      const container = new ContainerBuilder();
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
+
+      if (keptUrls.length > 0) {
+        container.addSeparatorComponents(
+          new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+        );
+        const gallery = new MediaGalleryBuilder();
+        for (const url of keptUrls) {
+          gallery.addItems(new MediaGalleryItemBuilder().setURL(url));
+        }
+        container.addMediaGalleryComponents(gallery);
+      }
+
+      let sentMsgId: string | undefined;
       try {
-        result = await sendPostToChannel(channel, filteredPostData, {
-          format: state.format,
-          template: state.template,
-          postTracking: {
-            guildId: state.guildId,
-            connectionId: state.connectionId,
-            postId: state.postData.postID,
-            sink: this.repo,
-          },
-          ...(state.customContent != null ? { contentOverride: state.customContent } : {}),
+        const sent = await channel.send({
+          flags: MessageFlags.IsComponentsV2,
+          components: [container],
         });
+        sentMsgId = sent.id;
+
+        // Record the posted message in the DB (equivalent to postTracking in sendPostToChannel).
+        if (state.postData.postID) {
+          this.repo.recordPosted(
+            state.guildId,
+            state.connectionId,
+            state.postData.postID,
+            sent.id,
+          );
+        }
       } catch (err) {
         log.error({ err, channelId: state.socialsChannelId }, "Failed to post to socials channel");
-        // Clean up media batch messages so channel isn't cluttered
-        await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
-        if (err instanceof MediaTooLargeError) {
-          await editStatusMessage(
-            reviewChannel,
-            lastMsgId,
-            `❌ Media too large to post (${(err.size / 1024 / 1024).toFixed(1)} MB).`,
-          );
-          return;
-        }
-        const msg =
+        const statusText =
           err instanceof Error && err.message.toLowerCase().includes("timed out")
             ? "❌ Timeout while posting"
             : "❌ Failed to post";
-        await editStatusMessage(reviewChannel, lastMsgId, msg);
+        await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, statusText);
         return;
       }
 
-      // Post succeeded — now safe to clean up the review messages.
-      await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
-
       const guildId = interaction.guildId;
-      const firstId = result.messageIds[0];
-      const postedLine =
-        guildId && firstId
-          ? `✅ Posted! https://discord.com/channels/${guildId}/${state.socialsChannelId}/${firstId}`
-          : "✅ Posted! (open the socials channel to see the message.)";
+      const postedUrl =
+        guildId && sentMsgId
+          ? `https://discord.com/channels/${guildId}/${state.socialsChannelId}/${sentMsgId}`
+          : undefined;
 
-      await editStatusMessage(reviewChannel, lastMsgId, postedLine);
-
-      // Intentional fire-and-forget: 5s delay is short and catch prevents noise
-      // if the bot shuts down before the timer fires.
-      setTimeout(async () => {
-        try {
-          if (lastMsgId) await reviewChannel.messages.delete(lastMsgId);
-        } catch {
-          // Already deleted
-        }
-      }, CLEANUP_DELAY_MS);
+      await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "✅ Posted!", postedUrl);
     } catch (err) {
       log.error({ err, channelId: state.socialsChannelId }, "Unexpected error in postReviewToSocials");
-      // Clean up media batch messages so channel isn't cluttered
-      await this.deleteReviewMediaMessages(reviewChannel, state.messageIds);
-      await editStatusMessage(reviewChannel, lastMsgId, "❌ Failed to post");
+      await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "❌ Failed to post");
     }
   }
 }

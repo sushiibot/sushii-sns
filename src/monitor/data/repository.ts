@@ -19,12 +19,46 @@ import {
   upsertGuildSettings,
   updateGuildTemplate,
   upsertPostedMessageTracking,
+  insertPendingReview,
+  getPendingReview,
+  updatePendingReview,
+  deletePendingReview,
   type GuildChannelSettings,
   type LastFetch,
   type PostPostedCheck,
+  type PendingReviewInsert,
+  type PendingReviewRow,
 } from "./queries";
+import type { ReviewState } from "../service/review/types";
 
-export type { LastFetch, PostPostedCheck };
+export type { LastFetch, PostPostedCheck, PendingReviewInsert };
+
+function rowToReviewState(row: PendingReviewRow): ReviewState {
+  const fileNames: string[] = JSON.parse(row.file_names);
+  const messageIds: string[] = JSON.parse(row.message_ids);
+  const removedIndicesArr: number[] = JSON.parse(row.removed_indices);
+
+  return {
+    postData: {
+      postID: row.post_id,
+      username: "",
+      postLink: { url: "", metadata: { platform: row.connection_id.split(":")[0] } as any },
+      files: fileNames.map((name) => ({ ext: name.split(".").pop() ?? "bin", buffer: Buffer.alloc(0) })),
+      originalText: "",
+    },
+    guildId: row.guild_id,
+    connectionId: row.connection_id,
+    removedIndices: new Set(removedIndicesArr),
+    customContent: row.custom_content,
+    renderedContent: row.rendered_content,
+    socialsChannelId: row.socials_channel_id,
+    format: row.format as ReviewState["format"],
+    template: row.template,
+    fetcherUserId: row.fetcher_user_id,
+    fileNames,
+    messageIds,
+  };
+}
 
 /**
  * Monitor persistence: guild config, per-connection fetch state, seen/post rows.
@@ -52,6 +86,12 @@ export interface MonitorRepository extends PostTrackingSink {
   purgeConnectionSeenPosts(guildId: string, connectionId: string): void;
   purgeAllSeenPosts(guildId: string): void;
   checkIfPostWasPublished(guildId: string, connectionId: string, postId: string): PostPostedCheck;
+
+  // Pending reviews
+  insertPendingReview(r: PendingReviewInsert): void;
+  getPendingReview(reviewId: string): ReviewState | null;
+  updatePendingReview(reviewId: string, updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] }): void;
+  deletePendingReview(reviewId: string): void;
 }
 
 export function createMonitorRepository(db: Database): MonitorRepository {
@@ -109,6 +149,21 @@ export function createMonitorRepository(db: Database): MonitorRepository {
     },
     checkIfPostWasPublished(guildId, connectionId, postId) {
       return checkIfPostWasPublished(db, guildId, connectionId, postId);
+    },
+
+    insertPendingReview(r) {
+      insertPendingReview(db, r);
+    },
+    getPendingReview(reviewId) {
+      const row = getPendingReview(db, reviewId);
+      if (!row) return null;
+      return rowToReviewState(row);
+    },
+    updatePendingReview(reviewId, updates) {
+      updatePendingReview(db, reviewId, updates);
+    },
+    deletePendingReview(reviewId) {
+      deletePendingReview(db, reviewId);
     },
   };
 }

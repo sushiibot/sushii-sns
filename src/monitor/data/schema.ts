@@ -49,4 +49,24 @@ export const METADATA_MIGRATIONS: string[][] = [
   [
     `ALTER TABLE monitors DROP COLUMN cooldown_seconds`,
   ],
+
+  // Migration 3 — persistent pending reviews (replaces in-memory ReviewStore)
+  [
+    `CREATE TABLE IF NOT EXISTS pending_reviews (
+      review_id          TEXT PRIMARY KEY,
+      guild_id           TEXT NOT NULL,
+      connection_id      TEXT NOT NULL,
+      post_id            TEXT NOT NULL,
+      message_ids        TEXT NOT NULL DEFAULT '[]',
+      file_names         TEXT NOT NULL DEFAULT '[]',
+      removed_indices    TEXT NOT NULL DEFAULT '[]',
+      custom_content     TEXT,
+      rendered_content   TEXT NOT NULL,
+      socials_channel_id TEXT NOT NULL,
+      format             TEXT NOT NULL,
+      template           TEXT NOT NULL,
+      fetcher_user_id    TEXT NOT NULL,
+      created_at         INTEGER NOT NULL
+    )`,
+  ],
 ];

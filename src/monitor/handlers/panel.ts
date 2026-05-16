@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { RESTJSONErrorCodes } from "discord-api-types/v10";
 import {
   DiscordAPIError,
@@ -20,7 +21,6 @@ import { syncAllMonitorConnections, fetchConnectionPosts, downloadFilesFromUrls 
 import { seedConnection, type SeedResult } from "../service/seed";
 import { sendMonitorLog } from "../log_channel";
 import type { ReviewState } from "../service/review/types";
-import type { ReviewStore } from "../service/review/store";
 import { ephemeralError, ephemeralWarn, editError, editSuccess, editInfo } from "../view/ephemeral";
 
 const log = logger.child({ module: "monitor/handlers/panel" });
@@ -45,7 +45,6 @@ export class PanelHandler {
 
   constructor(
     private readonly repo: MonitorRepository,
-    private readonly reviewStore: ReviewStore,
     private readonly serverConfig: ServerConfig | null,
     private readonly client: Client,
   ) {}
@@ -358,6 +357,21 @@ export class PanelHandler {
       if (!postData.postID) continue;
 
       const renderedContent = buildInlineFormatContent(config.template, postData as PostData<SnsMetadata>);
+      const reviewId = randomUUID();
+      const fileNames = postData.files.map((f, i) => `media-${i}.${f.ext}`);
+
+      this.repo.insertPendingReview({
+        reviewId,
+        guildId,
+        connectionId,
+        postId: postData.postID ?? "",
+        fileNames,
+        renderedContent,
+        socialsChannelId,
+        format: config.format,
+        template: config.template,
+        fetcherUserId: interaction.user.id,
+      });
 
       const reviewState: ReviewState = {
         postData,
@@ -370,11 +384,9 @@ export class PanelHandler {
         format: config.format,
         template: config.template,
         fetcherUserId: interaction.user.id,
-        fileNames: postData.files.map((f, i) => `media-${i}.${f.ext}`),
+        fileNames,
         messageIds: [],
       };
-
-      const reviewId = this.reviewStore.create(reviewState);
 
       try {
         const batches = buildReviewBatches(reviewState, reviewId);
@@ -387,11 +399,18 @@ export class PanelHandler {
           messageIds.push(msg.id);
         }
 
-        this.reviewStore.update(reviewId, { messageIds });
+        this.repo.updatePendingReview(reviewId, { messageIds });
+
+        // Free buffers now that images are uploaded to Discord.
+        // buildReviewBatches still uses postData.files.length for chunking — empty
+        // buffers are fine there since edits never re-upload attachments.
+        for (const file of postData.files) {
+          file.buffer = Buffer.alloc(0);
+        }
         reviewCount++;
       } catch (err) {
         log.error({ err, reviewId }, "Failed to send review message");
-        this.reviewStore.delete(reviewId);
+        this.repo.deletePendingReview(reviewId);
       }
     }
 

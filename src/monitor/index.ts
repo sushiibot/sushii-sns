@@ -2,7 +2,6 @@ import type { Client } from "discord.js";
 import type { ServerConfig } from "../config/server_config";
 import { openMetadataDb } from "./data/queries";
 import { createMonitorRepository } from "./data/repository";
-import { ReviewStore } from "./service/review/store";
 import { PostQueue } from "./service/queue";
 import { PanelHandler } from "./handlers/panel";
 import { ReviewHandler } from "./handlers/review";
@@ -20,10 +19,9 @@ export function createMonitor(
 ) {
   const db = openMetadataDb(dbPath);
   const repo = createMonitorRepository(db);
-  const reviewStore = new ReviewStore();
   const postQueue = new PostQueue();
-  const panelHandler = new PanelHandler(repo, reviewStore, serverConfig, client);
-  const reviewHandler = new ReviewHandler(reviewStore, postQueue, repo);
+  const panelHandler = new PanelHandler(repo, serverConfig, client);
+  const reviewHandler = new ReviewHandler(postQueue, repo);
   const postHandler = new PostHandler(repo);
   const configHandler = new ConfigHandler(repo, panelHandler);
 

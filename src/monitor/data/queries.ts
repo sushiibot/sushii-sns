@@ -331,3 +331,101 @@ export function purgeConnectionSeenPosts(
 export function purgeAllSeenPosts(db: Database, guildId: string): void {
   db.query(`DELETE FROM posts WHERE guild_id = ?`).run(guildId);
 }
+
+// ---------------------------------------------------------------------------
+// Pending reviews
+// ---------------------------------------------------------------------------
+
+export type PendingReviewRow = {
+  review_id: string;
+  guild_id: string;
+  connection_id: string;
+  post_id: string;
+  message_ids: string;      // JSON string array
+  file_names: string;       // JSON string array
+  removed_indices: string;  // JSON number array
+  custom_content: string | null;
+  rendered_content: string;
+  socials_channel_id: string;
+  format: string;
+  template: string;
+  fetcher_user_id: string;
+  created_at: number;
+};
+
+export type PendingReviewInsert = {
+  reviewId: string;
+  guildId: string;
+  connectionId: string;
+  postId: string;
+  fileNames: string[];
+  renderedContent: string;
+  socialsChannelId: string;
+  format: string;
+  template: string;
+  fetcherUserId: string;
+};
+
+export function insertPendingReview(db: Database, r: PendingReviewInsert): void {
+  db.query(
+    `INSERT INTO pending_reviews
+       (review_id, guild_id, connection_id, post_id, message_ids, file_names,
+        removed_indices, custom_content, rendered_content, socials_channel_id,
+        format, template, fetcher_user_id, created_at)
+     VALUES (?, ?, ?, ?, '[]', ?, '[]', NULL, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    r.reviewId,
+    r.guildId,
+    r.connectionId,
+    r.postId,
+    JSON.stringify(r.fileNames),
+    r.renderedContent,
+    r.socialsChannelId,
+    r.format,
+    r.template,
+    r.fetcherUserId,
+    Date.now(),
+  );
+}
+
+export function getPendingReview(db: Database, reviewId: string): PendingReviewRow | null {
+  return db
+    .query<PendingReviewRow, [string]>(
+      `SELECT review_id, guild_id, connection_id, post_id, message_ids, file_names,
+              removed_indices, custom_content, rendered_content, socials_channel_id,
+              format, template, fetcher_user_id, created_at
+       FROM pending_reviews WHERE review_id = ?`,
+    )
+    .get(reviewId) ?? null;
+}
+
+export function updatePendingReview(
+  db: Database,
+  reviewId: string,
+  updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] },
+): void {
+  const setClauses: string[] = [];
+  const values: (string | null)[] = [];
+
+  if (updates.removedIndices !== undefined) {
+    setClauses.push("removed_indices = ?");
+    values.push(JSON.stringify(updates.removedIndices));
+  }
+  if ("customContent" in updates) {
+    setClauses.push("custom_content = ?");
+    values.push(updates.customContent ?? null);
+  }
+  if (updates.messageIds !== undefined) {
+    setClauses.push("message_ids = ?");
+    values.push(JSON.stringify(updates.messageIds));
+  }
+
+  if (setClauses.length === 0) return;
+
+  values.push(reviewId);
+  db.query(`UPDATE pending_reviews SET ${setClauses.join(", ")} WHERE review_id = ?`).run(...values);
+}
+
+export function deletePendingReview(db: Database, reviewId: string): void {
+  db.query(`DELETE FROM pending_reviews WHERE review_id = ?`).run(reviewId);
+}
