@@ -3,9 +3,12 @@ import {
   AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ContainerBuilder,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   MessageFlags,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   TextDisplayBuilder,
@@ -13,6 +16,7 @@ import {
   type MessageEditOptions,
 } from "discord.js";
 import { chunkArray, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
+import { ACCENT_BLUE } from "./colors";
 import {
   REVIEW_EDIT_PREFIX,
   REVIEW_POST_PREFIX,
@@ -21,11 +25,7 @@ import {
   type ReviewState,
 } from "../service/review/types";
 
-type ReviewComponent =
-  | TextDisplayBuilder
-  | MediaGalleryBuilder
-  | ActionRowBuilder<StringSelectMenuBuilder>
-  | ActionRowBuilder<ButtonBuilder>;
+type ReviewComponent = ContainerBuilder;
 
 /**
  * Represents one message batch in a multi-message review.
@@ -83,18 +83,16 @@ function buildSimpleComponents(
   chunkIndex: number,
   startIdx: number,
 ): ReviewComponent[] {
-  const components: ReviewComponent[] = [];
   const allFileNames = state.fileNames;
+  const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
 
   if (chunkIndex === 0) {
     const headerText = state.customContent ?? state.renderedContent;
-    components.push(new TextDisplayBuilder().setContent(headerText));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
   } else {
     const endIdx = Math.min(startIdx + MAX_ATTACHMENTS_PER_MESSAGE, allFileNames.length);
-    components.push(
-      new TextDisplayBuilder().setContent(
-        `📎 Images ${startIdx + 1}–${endIdx}`
-      )
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`📎 Images ${startIdx + 1}–${endIdx}`)
     );
   }
 
@@ -104,14 +102,16 @@ function buildSimpleComponents(
     const globalIdx = startIdx + i;
     if (globalIdx >= allFileNames.length) break;
 
-    const item = new MediaGalleryItemBuilder()
-      .setURL(`attachment://${allFileNames[globalIdx]}`)
-      .setSpoiler(state.removedIndices.has(globalIdx));
-    gallery.addItems(item);
+    const isRemoved = state.removedIndices.has(globalIdx);
+    gallery.addItems(
+      new MediaGalleryItemBuilder()
+        .setURL(`attachment://${allFileNames[globalIdx]}`)
+        .setDescription(isRemoved ? `❌ Image ${globalIdx + 1} — removing` : `Image ${globalIdx + 1}`)
+    );
   }
-  components.push(gallery);
+  container.addMediaGalleryComponents(gallery);
 
-  return components;
+  return [container];
 }
 
 function buildControlComponents(
@@ -119,24 +119,30 @@ function buildControlComponents(
   reviewId: string,
   startIdx: number,
 ): ReviewComponent[] {
-  const components: ReviewComponent[] = [];
   const allFileNames = state.fileNames;
+  const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
 
   if (startIdx === 0) {
     const headerText = state.customContent ?? state.renderedContent;
-    components.push(new TextDisplayBuilder().setContent(headerText));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
   }
 
   if (allFileNames.length > 0) {
     const gallery = new MediaGalleryBuilder();
     for (let i = startIdx; i < allFileNames.length; i++) {
-      const item = new MediaGalleryItemBuilder()
-        .setURL(`attachment://${allFileNames[i]}`)
-        .setSpoiler(state.removedIndices.has(i));
-      gallery.addItems(item);
+      const isRemoved = state.removedIndices.has(i);
+      gallery.addItems(
+        new MediaGalleryItemBuilder()
+          .setURL(`attachment://${allFileNames[i]}`)
+          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
+      );
     }
-    components.push(gallery);
+    container.addMediaGalleryComponents(gallery);
   }
+
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+  );
 
   if (allFileNames.length > 1) {
     const fileOptions = allFileNames.map((name, i) => {
@@ -161,7 +167,7 @@ function buildControlComponents(
       .setMaxValues(options.length)
       .addOptions(options);
 
-    components.push(
+    container.addActionRowComponents(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu),
     );
   }
@@ -184,15 +190,11 @@ function buildControlComponents(
     .setEmoji("⏭️")
     .setStyle(ButtonStyle.Danger);
 
-  components.push(
-    new ActionRowBuilder<ButtonBuilder>().addComponents(
-      editButton,
-      postButton,
-      skipButton,
-    ),
+  container.addActionRowComponents(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(editButton, postButton, skipButton),
   );
 
-  return components;
+  return [container];
 }
 
 /**
@@ -213,9 +215,12 @@ export function batchToMessageOptions(
  * Must keep {@link MessageFlags.IsComponentsV2} or Discord rejects the edit and the UI can stay stuck.
  */
 export function buildReviewStatusEditOptions(statusText: string): MessageEditOptions {
+  const container = new ContainerBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(statusText)
+  );
   return {
     flags: MessageFlags.IsComponentsV2,
-    components: [new TextDisplayBuilder().setContent(statusText)] as MessageEditOptions["components"],
+    components: [container] as MessageEditOptions["components"],
     content: null,
     embeds: [],
     attachments: [],

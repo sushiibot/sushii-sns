@@ -5,14 +5,7 @@ import {
   MessageFlags,
   TextDisplayBuilder,
 } from "discord.js";
-
-// ---------------------------------------------------------------------------
-// Accent colors
-// ---------------------------------------------------------------------------
-
-export const ACCENT_RED = 0xed4245;
-export const ACCENT_YELLOW = 0xfee75c;
-export const ACCENT_GREEN = 0x57f287;
+import { ACCENT_GREEN, ACCENT_RED, ACCENT_YELLOW } from "./colors";
 
 // ---------------------------------------------------------------------------
 // Shared shape — compatible with reply(), followUp(), and editReply()
