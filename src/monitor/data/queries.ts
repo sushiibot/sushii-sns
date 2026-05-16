@@ -33,6 +33,7 @@ export function openMetadataDb(path: string): BunSQLiteDatabase {
 
   rawDb.exec("PRAGMA journal_mode=WAL;");
   const db = drizzle(rawDb);
+  // FK must be off during migration — Drizzle's table-rebuild idiom re-creates tables and would trip cascade rules.
   rawDb.exec("PRAGMA foreign_keys=OFF;");
   try {
     migrate(db, { migrationsFolder });
@@ -162,6 +163,7 @@ export function addMonitor(db: BunSQLiteDatabase, guildId: string, connection: C
     handle: connection.handle,
     profileName: connection.profile_name ?? null,
   });
+  // On conflict: update profileName only when provided, otherwise leave existing name intact.
   if (connection.profile_name != null) {
     insert.onConflictDoUpdate({
       target: [monitors.guildId, monitors.type, monitors.handle],
@@ -380,10 +382,7 @@ export function upsertPostedMessageTracking(
     })
     .onConflictDoUpdate({
       target: [posts.guildId, posts.type, posts.handle, posts.postId],
-      set: {
-        seenAt: now,
-        postedMessageId: discordMessageId,
-      },
+      set: { postedMessageId: discordMessageId },
     })
     .run();
 }
@@ -409,7 +408,9 @@ export function purgeConnectionSeenPosts(
 }
 
 export function purgeAllSeenPosts(db: BunSQLiteDatabase, guildId: string): void {
-  db.delete(posts).where(eq(posts.guildId, guildId)).run();
+  db.delete(posts)
+    .where(and(eq(posts.guildId, guildId), isNull(posts.postedMessageId)))
+    .run();
 }
 
 // ---------------------------------------------------------------------------

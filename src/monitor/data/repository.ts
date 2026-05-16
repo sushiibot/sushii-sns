@@ -1,5 +1,5 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import type { Connection, MonitorsConfig } from "../config";
+import type { Connection, MonitorsConfig, MonitorFormat } from "../config";
 import { FormatSchema } from "../config";
 import type { PostTrackingSink } from "./postTracking";
 import {
@@ -81,7 +81,7 @@ export interface MonitorRepository extends PostTrackingSink {
   // Config
   getConfig(guildId: string): MonitorsConfig | null;
   upsertSettings(guildId: string, settings: GuildChannelSettings): void;
-  updateTemplate(guildId: string, format: "inline" | "links", template: string): void;
+  updateTemplate(guildId: string, format: MonitorFormat, template: string): void;
   updatePanelMessage(guildId: string, messageId: string): void;
   addMonitor(guildId: string, connection: Connection): void;
   removeMonitor(guildId: string, type: string, handle: string): void;
