@@ -7,6 +7,7 @@ import {
   type ButtonInteraction,
   type MessageEditOptions,
   type ModalSubmitInteraction,
+  type RepliableInteraction,
   type StringSelectMenuInteraction,
   type TextBasedChannel,
 } from "discord.js";
@@ -50,7 +51,7 @@ export class ReviewHandler {
   ) {}
 
   private async replyNotFetcher(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    interaction: RepliableInteraction,
   ): Promise<void> {
     await interaction.reply({
       content: "Only the person who triggered the fetch can interact.",
@@ -133,10 +134,7 @@ export class ReviewHandler {
     }
 
     if (interaction.user.id !== state.fetcherUserId) {
-      await interaction.reply({
-        content: "Only the person who triggered the fetch can interact.",
-        flags: MessageFlags.Ephemeral,
-      });
+      await this.replyNotFetcher(interaction);
       return;
     }
 

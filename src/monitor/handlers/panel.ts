@@ -386,7 +386,7 @@ export class PanelHandler {
     if (connection.type === "instagram") {
       const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);
       await interaction.editReply(
-        editSuccess(`Found ${reviewCount} new post${reviewCount === 1 ? "" : "s"} (${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}). Review messages created below.`),
+        editSuccess(`Found ${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}. Review messages created below.`),
       );
     } else {
       await interaction.editReply(
