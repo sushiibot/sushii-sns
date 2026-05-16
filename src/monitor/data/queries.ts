@@ -420,6 +420,8 @@ export function purgeAllSeenPosts(db: BunSQLiteDatabase, guildId: string): void 
 // Pending reviews
 // ---------------------------------------------------------------------------
 
+export type ReviewStatus = "pending" | "posted" | "skipped";
+
 export type PendingReviewRow = {
   review_id: string;
   guild_id: string;
@@ -439,6 +441,8 @@ export type PendingReviewRow = {
   template: string;
   fetcher_user_id: string;
   created_at: number;
+  status: ReviewStatus;
+  posted_discord_url: string | null;
 };
 
 export type PendingReviewInsert = {
@@ -509,6 +513,8 @@ export function getPendingReview(db: BunSQLiteDatabase, reviewId: string): Pendi
     template: row.template,
     fetcher_user_id: row.fetcherUserId,
     created_at: row.createdAt,
+    status: row.status as ReviewStatus,
+    posted_discord_url: row.postedDiscordUrl,
   };
 }
 
@@ -540,4 +546,29 @@ export function updatePendingReview(
 
 export function deletePendingReview(db: BunSQLiteDatabase, reviewId: string): void {
   db.delete(pendingReviews).where(eq(pendingReviews.reviewId, reviewId)).run();
+}
+
+export function setReviewStatus(
+  db: BunSQLiteDatabase,
+  reviewId: string,
+  status: Exclude<ReviewStatus, "pending">,
+): boolean {
+  const rows = db
+    .update(pendingReviews)
+    .set({ status })
+    .where(and(eq(pendingReviews.reviewId, reviewId), eq(pendingReviews.status, "pending")))
+    .returning({ reviewId: pendingReviews.reviewId })
+    .all();
+  return rows.length > 0;
+}
+
+export function setReviewPostedUrl(
+  db: BunSQLiteDatabase,
+  reviewId: string,
+  postedDiscordUrl: string,
+): void {
+  db.update(pendingReviews)
+    .set({ postedDiscordUrl })
+    .where(eq(pendingReviews.reviewId, reviewId))
+    .run();
 }

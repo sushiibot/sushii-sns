@@ -69,4 +69,6 @@ export const pendingReviews = sqliteTable("pending_reviews", {
   template: text("template").notNull(),
   fetcherUserId: text("fetcher_user_id").notNull(),
   createdAt: integer("created_at").notNull(),
+  status: text("status").notNull().default("pending"),
+  postedDiscordUrl: text("posted_discord_url"),
 });

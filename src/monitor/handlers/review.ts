@@ -171,10 +171,13 @@ export class ReviewHandler {
       return;
     }
 
-    // Delete synchronously before any await so a second rapid click finds no
-    // state and hits the early return, preventing double-posts.
+    // Atomically claim the review — if another click beat us, bail out.
     // The captured `state` variable remains valid for the rest of the method.
-    this.repo.deletePendingReview(reviewId);
+    const claimed = this.repo.setReviewStatus(reviewId, "posted");
+    if (!claimed) {
+      await interaction.reply(ephemeralError("This review has already been handled."));
+      return;
+    }
 
     await interaction.deferUpdate();
 
@@ -228,14 +231,16 @@ export class ReviewHandler {
       return;
     }
 
-    await interaction.deferUpdate();
+    const claimed = this.repo.setReviewStatus(reviewId, "skipped");
+    if (!claimed) {
+      await interaction.reply(ephemeralError("This review has already been handled."));
+      return;
+    }
 
-    this.repo.deletePendingReview(reviewId);
+    await interaction.deferUpdate();
 
     const reviewChannel = interaction.channel;
     if (!reviewChannel || !reviewChannel.isTextBased()) return;
-
-    const lastMsgId = state.messageIds[state.messageIds.length - 1];
 
     for (const msgId of state.messageIds) {
       try { await reviewChannel.messages.delete(msgId); } catch { /* already gone */ }
@@ -354,6 +359,15 @@ export class ReviewHandler {
             state.postData.postID,
             sent.id,
           );
+        }
+
+        // Persist the Discord URL so the review row is queryable after posting.
+        const postedUrlForDb =
+          interaction.guildId
+            ? `https://discord.com/channels/${interaction.guildId}/${state.socialsChannelId}/${sent.id}`
+            : null;
+        if (postedUrlForDb) {
+          this.repo.setReviewPostedUrl(reviewId, postedUrlForDb);
         }
       } catch (err) {
         log.error({ err, channelId: state.socialsChannelId }, "Failed to post to socials channel");

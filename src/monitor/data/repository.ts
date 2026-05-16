@@ -26,15 +26,18 @@ import {
   getPendingReview,
   updatePendingReview,
   deletePendingReview,
+  setReviewStatus,
+  setReviewPostedUrl,
   type GuildChannelSettings,
   type LastFetch,
   type PostPostedCheck,
   type PendingReviewInsert,
   type PendingReviewRow,
+  type ReviewStatus,
 } from "./queries";
 import type { ReviewState } from "../service/review/types";
 
-export type { LastFetch, PostPostedCheck, PendingReviewInsert, GuildChannelSettings };
+export type { LastFetch, PostPostedCheck, PendingReviewInsert, GuildChannelSettings, ReviewStatus };
 
 const log = logger.child({ module: "monitor/repository" });
 
@@ -115,6 +118,8 @@ export interface MonitorRepository extends PostTrackingSink {
   getPendingReview(reviewId: string): ReviewState | null;
   updatePendingReview(reviewId: string, updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] }): void;
   deletePendingReview(reviewId: string): void;
+  setReviewStatus(reviewId: string, status: Exclude<ReviewStatus, "pending">): boolean;
+  setReviewPostedUrl(reviewId: string, postedDiscordUrl: string): void;
 }
 
 export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepository {
@@ -187,6 +192,12 @@ export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepositor
     },
     deletePendingReview(reviewId) {
       deletePendingReview(db, reviewId);
+    },
+    setReviewStatus(reviewId, status) {
+      return setReviewStatus(db, reviewId, status);
+    },
+    setReviewPostedUrl(reviewId, postedDiscordUrl) {
+      setReviewPostedUrl(db, reviewId, postedDiscordUrl);
     },
   };
 }
