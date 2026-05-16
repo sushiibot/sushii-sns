@@ -1,9 +1,23 @@
 import { Database } from "bun:sqlite";
+import { drizzle, type BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import logger from "../../logger";
-import { MonitorsConfig, ConnectionTypeSchema, FormatSchema, parseConnectionId, type Connection, type MonitorFormat } from "../config";
-import { METADATA_MIGRATIONS } from "./schema";
+import {
+  MonitorsConfig,
+  ConnectionTypeSchema,
+  FormatSchema,
+  parseConnectionId,
+  type Connection,
+  type MonitorFormat,
+} from "../config";
+import { guildSettings, monitors, pendingReviews, posts } from "./schema";
 
 const log = logger.child({ module: "monitor/db" });
+
+const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../../drizzle/migrations");
 
 export type LastFetch = {
   last_fetched_at: number;
@@ -14,30 +28,20 @@ export type PostPostedCheck =
   | { wasPosted: false; messageId: null }
   | { wasPosted: true; messageId: string };
 
-function runMigrations(db: Database, migrations: string[][]): void {
-  const row = db.query("PRAGMA user_version").get() as { user_version: number };
-  const currentVersion = row.user_version;
+export function openMetadataDb(path: string): BunSQLiteDatabase {
+  const rawDb = new Database(path, { create: true });
 
-  const migrate = db.transaction((sqls: string[], version: number) => {
-    for (const sql of sqls) {
-      db.exec(sql);
-    }
-    // PRAGMA cannot use parameterized queries; version is always an array index (integer)
-    db.exec(`PRAGMA user_version = ${version}`);
-  });
-
-  for (let i = currentVersion; i < migrations.length; i++) {
-    log.info({ version: i }, "Running DB migration");
-    migrate(migrations[i], i + 1);
+  rawDb.exec("PRAGMA journal_mode=WAL;");
+  const db = drizzle(rawDb);
+  rawDb.exec("PRAGMA foreign_keys=OFF;");
+  try {
+    migrate(db, { migrationsFolder });
+  } catch (err) {
+    log.error({ err, path, migrationsFolder }, "DB migration failed");
+    rawDb.close();
+    throw err;
   }
-}
-
-export function openMetadataDb(path: string): Database {
-  const db = new Database(path, { create: true });
-
-  db.exec("PRAGMA journal_mode=WAL;");
-  db.exec("PRAGMA foreign_keys=ON;");
-  runMigrations(db, METADATA_MIGRATIONS);
+  rawDb.exec("PRAGMA foreign_keys=ON;");
 
   return db;
 }
@@ -46,39 +50,33 @@ export function openMetadataDb(path: string): Database {
 // Config — guild_settings + monitors
 // ---------------------------------------------------------------------------
 
-type GuildSettingsRow = {
-  panel_channel_id: string;
-  panel_message_id: string | null;
-  socials_channel_id: string;
-  trigger_role_id: string | null;
-  log_channel_id: string | null;
-  format: string;
-  template: string;
-};
-
-type MonitorRow = {
-  type: string;
-  handle: string;
-  profile_name: string | null;
-};
-
-export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig | null {
+export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): MonitorsConfig | null {
   const settings = db
-    .query<GuildSettingsRow, [string]>(
-      `SELECT panel_channel_id, panel_message_id, socials_channel_id,
-              trigger_role_id, log_channel_id, format, template
-       FROM guild_settings WHERE guild_id = ?`,
-    )
-    .get(guildId);
+    .select({
+      panelChannelId: guildSettings.panelChannelId,
+      panelMessageId: guildSettings.panelMessageId,
+      socialsChannelId: guildSettings.socialsChannelId,
+      triggerRoleId: guildSettings.triggerRoleId,
+      logChannelId: guildSettings.logChannelId,
+      format: guildSettings.format,
+      template: guildSettings.template,
+    })
+    .from(guildSettings)
+    .where(eq(guildSettings.guildId, guildId))
+    .get();
 
   if (!settings) return null;
 
   const rows = db
-    .query<MonitorRow, [string]>(
-      `SELECT type, handle, profile_name
-       FROM monitors WHERE guild_id = ? ORDER BY type, handle`,
-    )
-    .all(guildId);
+    .select({
+      type: monitors.type,
+      handle: monitors.handle,
+      profileName: monitors.profileName,
+    })
+    .from(monitors)
+    .where(eq(monitors.guildId, guildId))
+    .orderBy(monitors.type, monitors.handle)
+    .all();
 
   const connections: Connection[] = rows.flatMap((r) => {
     const typeParsed = ConnectionTypeSchema.safeParse(r.type);
@@ -89,7 +87,7 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
     return [{
       type: typeParsed.data,
       handle: r.handle,
-      profile_name: r.profile_name ?? null,
+      profile_name: r.profileName ?? null,
     }];
   });
 
@@ -97,11 +95,11 @@ export function getMonitorsConfig(db: Database, guildId: string): MonitorsConfig
   const format = formatParsed.success ? formatParsed.data : "inline";
 
   return new MonitorsConfig({
-    panel_channel_id: settings.panel_channel_id,
-    panel_message_id: settings.panel_message_id ?? null,
-    socials_channel_id: settings.socials_channel_id,
-    trigger_role_id: settings.trigger_role_id ?? null,
-    log_channel_id: settings.log_channel_id ?? null,
+    panel_channel_id: settings.panelChannelId,
+    panel_message_id: settings.panelMessageId ?? null,
+    socials_channel_id: settings.socialsChannelId,
+    trigger_role_id: settings.triggerRoleId ?? null,
+    log_channel_id: settings.logChannelId ?? null,
     format,
     template: settings.template,
     connections,
@@ -114,56 +112,66 @@ export type GuildChannelSettings = Pick<
 >;
 
 export function upsertGuildSettings(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   settings: GuildChannelSettings,
 ): void {
-  db.query(
-    `INSERT INTO guild_settings
-       (guild_id, panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(guild_id) DO UPDATE SET
-       panel_channel_id   = excluded.panel_channel_id,
-       socials_channel_id = excluded.socials_channel_id,
-       trigger_role_id    = excluded.trigger_role_id,
-       log_channel_id     = excluded.log_channel_id`,
-  ).run(
-    guildId,
-    settings.panel_channel_id,
-    settings.socials_channel_id,
-    settings.trigger_role_id,
-    settings.log_channel_id,
-  );
+  db.insert(guildSettings)
+    .values({
+      guildId,
+      panelChannelId: settings.panel_channel_id,
+      socialsChannelId: settings.socials_channel_id,
+      triggerRoleId: settings.trigger_role_id,
+      logChannelId: settings.log_channel_id,
+    })
+    .onConflictDoUpdate({
+      target: guildSettings.guildId,
+      set: {
+        panelChannelId: settings.panel_channel_id,
+        socialsChannelId: settings.socials_channel_id,
+        triggerRoleId: settings.trigger_role_id,
+        logChannelId: settings.log_channel_id,
+      },
+    })
+    .run();
 }
 
 export function updateGuildTemplate(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   format: MonitorFormat,
   template: string,
 ): void {
-  db.query(
-    `UPDATE guild_settings SET format = ?, template = ? WHERE guild_id = ?`,
-  ).run(format, template, guildId);
+  db.update(guildSettings)
+    .set({ format, template })
+    .where(eq(guildSettings.guildId, guildId))
+    .run();
 }
 
-export function updatePanelMessage(db: Database, guildId: string, messageId: string): void {
-  db.query(
-    `UPDATE guild_settings SET panel_message_id = ? WHERE guild_id = ?`,
-  ).run(messageId, guildId);
+export function updatePanelMessage(db: BunSQLiteDatabase, guildId: string, messageId: string): void {
+  db.update(guildSettings)
+    .set({ panelMessageId: messageId })
+    .where(eq(guildSettings.guildId, guildId))
+    .run();
 }
 
-export function addMonitor(db: Database, guildId: string, connection: Connection): void {
-  db.query(
-    `INSERT INTO monitors (guild_id, type, handle, profile_name)
-     VALUES (?, ?, ?, ?)
-     ON CONFLICT(guild_id, type, handle) DO UPDATE SET
-       profile_name = excluded.profile_name`,
-  ).run(guildId, connection.type, connection.handle, connection.profile_name ?? null);
+export function addMonitor(db: BunSQLiteDatabase, guildId: string, connection: Connection): void {
+  db.insert(monitors)
+    .values({
+      guildId,
+      type: connection.type,
+      handle: connection.handle,
+      profileName: connection.profile_name ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [monitors.guildId, monitors.type, monitors.handle],
+      set: connection.profile_name != null ? { profileName: connection.profile_name } : {},
+    })
+    .run();
 }
 
 export function setConnectionProfileName(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   profileName: string | null,
@@ -171,15 +179,28 @@ export function setConnectionProfileName(
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `UPDATE monitors SET profile_name = ? WHERE guild_id = ? AND type = ? AND handle = ?`,
-  ).run(profileName, guildId, parts.type, parts.handle);
+  db.update(monitors)
+    .set({ profileName })
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, parts.type),
+        eq(monitors.handle, parts.handle),
+      ),
+    )
+    .run();
 }
 
-export function removeMonitor(db: Database, guildId: string, type: string, handle: string): void {
-  db.query(
-    `DELETE FROM monitors WHERE guild_id = ? AND type = ? AND handle = ?`,
-  ).run(guildId, type, handle);
+export function removeMonitor(db: BunSQLiteDatabase, guildId: string, type: string, handle: string): void {
+  db.delete(monitors)
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, type),
+        eq(monitors.handle, handle),
+      ),
+    )
+    .run();
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +208,7 @@ export function removeMonitor(db: Database, guildId: string, type: string, handl
 // ---------------------------------------------------------------------------
 
 export function getConnectionMeta(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
 ): LastFetch | null {
@@ -195,18 +216,26 @@ export function getConnectionMeta(
   if (!parts) return null;
 
   const row = db
-    .query<{ last_fetched_at: number | null; last_fetched_by: string | null }, [string, string, string]>(
-      `SELECT last_fetched_at, last_fetched_by FROM monitors
-       WHERE guild_id = ? AND type = ? AND handle = ?`,
+    .select({
+      lastFetchedAt: monitors.lastFetchedAt,
+      lastFetchedBy: monitors.lastFetchedBy,
+    })
+    .from(monitors)
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, parts.type),
+        eq(monitors.handle, parts.handle),
+      ),
     )
-    .get(guildId, parts.type, parts.handle);
+    .get();
 
-  if (!row || row.last_fetched_at === null || row.last_fetched_by === null) return null;
-  return { last_fetched_at: row.last_fetched_at, last_fetched_by: row.last_fetched_by };
+  if (!row || row.lastFetchedAt === null || row.lastFetchedBy === null) return null;
+  return { last_fetched_at: row.lastFetchedAt, last_fetched_by: row.lastFetchedBy };
 }
 
 export function upsertConnectionMeta(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   lastFetchedAt: number,
@@ -215,26 +244,39 @@ export function upsertConnectionMeta(
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `UPDATE monitors SET last_fetched_at = ?, last_fetched_by = ?
-     WHERE guild_id = ? AND type = ? AND handle = ?`,
-  ).run(lastFetchedAt, lastFetchedBy, guildId, parts.type, parts.handle);
+  db.update(monitors)
+    .set({ lastFetchedAt, lastFetchedBy })
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, parts.type),
+        eq(monitors.handle, parts.handle),
+      ),
+    )
+    .run();
 }
 
-export function purgeConnectionMeta(db: Database, guildId: string, connectionId: string): void {
+export function purgeConnectionMeta(db: BunSQLiteDatabase, guildId: string, connectionId: string): void {
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `UPDATE monitors SET last_fetched_at = NULL, last_fetched_by = NULL
-     WHERE guild_id = ? AND type = ? AND handle = ?`,
-  ).run(guildId, parts.type, parts.handle);
+  db.update(monitors)
+    .set({ lastFetchedAt: null, lastFetchedBy: null })
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, parts.type),
+        eq(monitors.handle, parts.handle),
+      ),
+    )
+    .run();
 }
 
-export function purgeAllConnectionMeta(db: Database, guildId: string): void {
-  db.query(
-    `UPDATE monitors SET last_fetched_at = NULL, last_fetched_by = NULL WHERE guild_id = ?`,
-  ).run(guildId);
+export function purgeAllConnectionMeta(db: BunSQLiteDatabase, guildId: string): void {
+  db.update(monitors)
+    .set({ lastFetchedAt: null, lastFetchedBy: null })
+    .where(eq(monitors.guildId, guildId))
+    .run();
 }
 
 // ---------------------------------------------------------------------------
@@ -242,7 +284,7 @@ export function purgeAllConnectionMeta(db: Database, guildId: string): void {
 // ---------------------------------------------------------------------------
 
 export function isPostSeen(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   postId: string,
@@ -251,16 +293,23 @@ export function isPostSeen(
   if (!parts) return false;
 
   const row = db
-    .query<{ count: number }, [string, string, string, string]>(
-      `SELECT COUNT(*) as count FROM posts
-       WHERE guild_id = ? AND type = ? AND handle = ? AND post_id = ?`,
+    .select({ x: sql`1` })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.guildId, guildId),
+        eq(posts.type, parts.type),
+        eq(posts.handle, parts.handle),
+        eq(posts.postId, postId),
+      ),
     )
-    .get(guildId, parts.type, parts.handle, postId);
-  return (row?.count ?? 0) > 0;
+    .limit(1)
+    .get();
+  return row !== undefined;
 }
 
 export function markPostSeen(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   postId: string,
@@ -268,14 +317,20 @@ export function markPostSeen(
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `INSERT OR IGNORE INTO posts (guild_id, type, handle, post_id, seen_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(guildId, parts.type, parts.handle, postId, Date.now());
+  db.insert(posts)
+    .values({
+      guildId,
+      type: parts.type,
+      handle: parts.handle,
+      postId,
+      seenAt: Date.now(),
+    })
+    .onConflictDoNothing()
+    .run();
 }
 
 export function checkIfPostWasPublished(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   postId: string,
@@ -284,19 +339,25 @@ export function checkIfPostWasPublished(
   if (!parts) return { wasPosted: false, messageId: null };
 
   const row = db
-    .query<{ posted_message_id: string | null }, [string, string, string, string]>(
-      `SELECT posted_message_id FROM posts
-       WHERE guild_id = ? AND type = ? AND handle = ? AND post_id = ?`,
+    .select({ postedMessageId: posts.postedMessageId })
+    .from(posts)
+    .where(
+      and(
+        eq(posts.guildId, guildId),
+        eq(posts.type, parts.type),
+        eq(posts.handle, parts.handle),
+        eq(posts.postId, postId),
+      ),
     )
-    .get(guildId, parts.type, parts.handle, postId);
+    .get();
 
-  const messageId = row?.posted_message_id ?? null;
-  if (messageId !== null) return { wasPosted: true as const, messageId };
-  return { wasPosted: false as const, messageId: null };
+  const messageId = row?.postedMessageId ?? null;
+  if (messageId !== null) return { wasPosted: true, messageId };
+  return { wasPosted: false, messageId: null };
 }
 
 export function upsertPostedMessageTracking(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
   postId: string,
@@ -305,31 +366,47 @@ export function upsertPostedMessageTracking(
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `INSERT INTO posts (guild_id, type, handle, post_id, seen_at, posted_message_id)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(guild_id, type, handle, post_id) DO UPDATE SET
-       seen_at           = excluded.seen_at,
-       posted_message_id = excluded.posted_message_id`,
-  ).run(guildId, parts.type, parts.handle, postId, Date.now(), discordMessageId);
+  db.insert(posts)
+    .values({
+      guildId,
+      type: parts.type,
+      handle: parts.handle,
+      postId,
+      seenAt: Date.now(),
+      postedMessageId: discordMessageId,
+    })
+    .onConflictDoUpdate({
+      target: [posts.guildId, posts.type, posts.handle, posts.postId],
+      set: {
+        seenAt: Date.now(),
+        postedMessageId: discordMessageId,
+      },
+    })
+    .run();
 }
 
 export function purgeConnectionSeenPosts(
-  db: Database,
+  db: BunSQLiteDatabase,
   guildId: string,
   connectionId: string,
 ): void {
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
-  db.query(
-    `DELETE FROM posts
-     WHERE guild_id = ? AND type = ? AND handle = ? AND posted_message_id IS NULL`,
-  ).run(guildId, parts.type, parts.handle);
+  db.delete(posts)
+    .where(
+      and(
+        eq(posts.guildId, guildId),
+        eq(posts.type, parts.type),
+        eq(posts.handle, parts.handle),
+        isNull(posts.postedMessageId),
+      ),
+    )
+    .run();
 }
 
-export function purgeAllSeenPosts(db: Database, guildId: string): void {
-  db.query(`DELETE FROM posts WHERE guild_id = ?`).run(guildId);
+export function purgeAllSeenPosts(db: BunSQLiteDatabase, guildId: string): void {
+  db.delete(posts).where(eq(posts.guildId, guildId)).run();
 }
 
 // ---------------------------------------------------------------------------
@@ -366,66 +443,78 @@ export type PendingReviewInsert = {
   fetcherUserId: string;
 };
 
-export function insertPendingReview(db: Database, r: PendingReviewInsert): void {
-  db.query(
-    `INSERT INTO pending_reviews
-       (review_id, guild_id, connection_id, post_id, message_ids, file_names,
-        removed_indices, custom_content, rendered_content, socials_channel_id,
-        format, template, fetcher_user_id, created_at)
-     VALUES (?, ?, ?, ?, '[]', ?, '[]', NULL, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    r.reviewId,
-    r.guildId,
-    r.connectionId,
-    r.postId,
-    JSON.stringify(r.fileNames),
-    r.renderedContent,
-    r.socialsChannelId,
-    r.format,
-    r.template,
-    r.fetcherUserId,
-    Date.now(),
-  );
+export function insertPendingReview(db: BunSQLiteDatabase, r: PendingReviewInsert): void {
+  db.insert(pendingReviews)
+    .values({
+      reviewId: r.reviewId,
+      guildId: r.guildId,
+      connectionId: r.connectionId,
+      postId: r.postId,
+      fileNames: JSON.stringify(r.fileNames),
+      customContent: null,
+      renderedContent: r.renderedContent,
+      socialsChannelId: r.socialsChannelId,
+      format: r.format,
+      template: r.template,
+      fetcherUserId: r.fetcherUserId,
+      createdAt: Date.now(),
+    })
+    .run();
 }
 
-export function getPendingReview(db: Database, reviewId: string): PendingReviewRow | null {
-  return db
-    .query<PendingReviewRow, [string]>(
-      `SELECT review_id, guild_id, connection_id, post_id, message_ids, file_names,
-              removed_indices, custom_content, rendered_content, socials_channel_id,
-              format, template, fetcher_user_id, created_at
-       FROM pending_reviews WHERE review_id = ?`,
-    )
-    .get(reviewId) ?? null;
+export function getPendingReview(db: BunSQLiteDatabase, reviewId: string): PendingReviewRow | null {
+  const row = db
+    .select()
+    .from(pendingReviews)
+    .where(eq(pendingReviews.reviewId, reviewId))
+    .get();
+
+  if (!row) return null;
+
+  return {
+    review_id: row.reviewId,
+    guild_id: row.guildId,
+    connection_id: row.connectionId,
+    post_id: row.postId,
+    message_ids: row.messageIds,
+    file_names: row.fileNames,
+    removed_indices: row.removedIndices,
+    custom_content: row.customContent,
+    rendered_content: row.renderedContent,
+    socials_channel_id: row.socialsChannelId,
+    format: row.format,
+    template: row.template,
+    fetcher_user_id: row.fetcherUserId,
+    created_at: row.createdAt,
+  };
 }
 
 export function updatePendingReview(
-  db: Database,
+  db: BunSQLiteDatabase,
   reviewId: string,
   updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] },
 ): void {
-  const setClauses: string[] = [];
-  const values: (string | null)[] = [];
+  const set: Partial<typeof pendingReviews.$inferInsert> = {};
 
   if (updates.removedIndices !== undefined) {
-    setClauses.push("removed_indices = ?");
-    values.push(JSON.stringify(updates.removedIndices));
+    set.removedIndices = JSON.stringify(updates.removedIndices);
   }
+  // Use `in` (not `!== undefined`) so explicit null passes through to set the column to NULL.
   if ("customContent" in updates) {
-    setClauses.push("custom_content = ?");
-    values.push(updates.customContent ?? null);
+    set.customContent = updates.customContent ?? null;
   }
   if (updates.messageIds !== undefined) {
-    setClauses.push("message_ids = ?");
-    values.push(JSON.stringify(updates.messageIds));
+    set.messageIds = JSON.stringify(updates.messageIds);
   }
 
-  if (setClauses.length === 0) return;
+  if (Object.keys(set).length === 0) return;
 
-  values.push(reviewId);
-  db.query(`UPDATE pending_reviews SET ${setClauses.join(", ")} WHERE review_id = ?`).run(...values);
+  db.update(pendingReviews)
+    .set(set)
+    .where(eq(pendingReviews.reviewId, reviewId))
+    .run();
 }
 
-export function deletePendingReview(db: Database, reviewId: string): void {
-  db.query(`DELETE FROM pending_reviews WHERE review_id = ?`).run(reviewId);
+export function deletePendingReview(db: BunSQLiteDatabase, reviewId: string): void {
+  db.delete(pendingReviews).where(eq(pendingReviews.reviewId, reviewId)).run();
 }

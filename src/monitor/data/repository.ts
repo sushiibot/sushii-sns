@@ -1,5 +1,6 @@
-import type { Database } from "bun:sqlite";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { Connection, MonitorsConfig } from "../config";
+import { FormatSchema } from "../config";
 import type { PostTrackingSink } from "./postTracking";
 import {
   addMonitor,
@@ -33,10 +34,21 @@ import type { ReviewState } from "../service/review/types";
 
 export type { LastFetch, PostPostedCheck, PendingReviewInsert };
 
+function safeParse<T>(json: string, fallback: T): T {
+  try {
+    return JSON.parse(json) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 function rowToReviewState(row: PendingReviewRow): ReviewState {
-  const fileNames: string[] = JSON.parse(row.file_names);
-  const messageIds: string[] = JSON.parse(row.message_ids);
-  const removedIndicesArr: number[] = JSON.parse(row.removed_indices);
+  const fileNames: string[] = safeParse(row.file_names, []);
+  const messageIds: string[] = safeParse(row.message_ids, []);
+  const removedIndicesArr: number[] = safeParse(row.removed_indices, []);
+
+  const formatParsed = FormatSchema.safeParse(row.format);
+  const format = formatParsed.success ? formatParsed.data : "inline";
 
   return {
     postData: {
@@ -52,7 +64,7 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
     customContent: row.custom_content,
     renderedContent: row.rendered_content,
     socialsChannelId: row.socials_channel_id,
-    format: row.format as ReviewState["format"],
+    format,
     template: row.template,
     fetcherUserId: row.fetcher_user_id,
     fileNames,
@@ -94,7 +106,7 @@ export interface MonitorRepository extends PostTrackingSink {
   deletePendingReview(reviewId: string): void;
 }
 
-export function createMonitorRepository(db: Database): MonitorRepository {
+export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepository {
   return {
     recordPosted(guildId, connectionId, postId, discordMessageId) {
       upsertPostedMessageTracking(db, guildId, connectionId, postId, discordMessageId);
