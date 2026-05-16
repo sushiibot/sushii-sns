@@ -1,6 +1,7 @@
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { Connection, MonitorsConfig, MonitorFormat } from "../config";
 import { FormatSchema } from "../config";
+import logger from "../../logger";
 import type { PostTrackingSink } from "./postTracking";
 import {
   addMonitor,
@@ -34,6 +35,8 @@ import type { ReviewState } from "../service/review/types";
 
 export type { LastFetch, PostPostedCheck, PendingReviewInsert, GuildChannelSettings };
 
+const log = logger.child({ module: "monitor/repository" });
+
 function safeParseArray<T>(json: string, fallback: T[]): T[] {
   try {
     const v = JSON.parse(json);
@@ -49,6 +52,9 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
   const removedIndicesArr: number[] = safeParseArray(row.removed_indices, []);
 
   const formatParsed = FormatSchema.safeParse(row.format);
+  if (!formatParsed.success) {
+    log.warn({ format: row.format, reviewId: row.review_id }, "Unknown format in pending_reviews, defaulting to inline");
+  }
   const format = formatParsed.success ? formatParsed.data : "inline";
 
   return {
