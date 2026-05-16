@@ -156,18 +156,20 @@ export function updatePanelMessage(db: BunSQLiteDatabase, guildId: string, messa
 }
 
 export function addMonitor(db: BunSQLiteDatabase, guildId: string, connection: Connection): void {
-  db.insert(monitors)
-    .values({
-      guildId,
-      type: connection.type,
-      handle: connection.handle,
-      profileName: connection.profile_name ?? null,
-    })
-    .onConflictDoUpdate({
+  const insert = db.insert(monitors).values({
+    guildId,
+    type: connection.type,
+    handle: connection.handle,
+    profileName: connection.profile_name ?? null,
+  });
+  if (connection.profile_name != null) {
+    insert.onConflictDoUpdate({
       target: [monitors.guildId, monitors.type, monitors.handle],
-      set: connection.profile_name != null ? { profileName: connection.profile_name } : {},
-    })
-    .run();
+      set: { profileName: connection.profile_name },
+    }).run();
+  } else {
+    insert.onConflictDoNothing().run();
+  }
 }
 
 export function setConnectionProfileName(
@@ -366,19 +368,20 @@ export function upsertPostedMessageTracking(
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
+  const now = Date.now();
   db.insert(posts)
     .values({
       guildId,
       type: parts.type,
       handle: parts.handle,
       postId,
-      seenAt: Date.now(),
+      seenAt: now,
       postedMessageId: discordMessageId,
     })
     .onConflictDoUpdate({
       target: [posts.guildId, posts.type, posts.handle, posts.postId],
       set: {
-        seenAt: Date.now(),
+        seenAt: now,
         postedMessageId: discordMessageId,
       },
     })
@@ -494,7 +497,7 @@ export function updatePendingReview(
   reviewId: string,
   updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] },
 ): void {
-  const set: Partial<typeof pendingReviews.$inferInsert> = {};
+  const set: Partial<Pick<typeof pendingReviews.$inferInsert, "removedIndices" | "customContent" | "messageIds">> = {};
 
   if (updates.removedIndices !== undefined) {
     set.removedIndices = JSON.stringify(updates.removedIndices);

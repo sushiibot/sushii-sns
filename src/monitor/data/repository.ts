@@ -34,18 +34,19 @@ import type { ReviewState } from "../service/review/types";
 
 export type { LastFetch, PostPostedCheck, PendingReviewInsert };
 
-function safeParse<T>(json: string, fallback: T): T {
+function safeParseArray<T>(json: string, fallback: T[]): T[] {
   try {
-    return JSON.parse(json) as T;
+    const v = JSON.parse(json);
+    return Array.isArray(v) ? v : fallback;
   } catch {
     return fallback;
   }
 }
 
 function rowToReviewState(row: PendingReviewRow): ReviewState {
-  const fileNames: string[] = safeParse(row.file_names, []);
-  const messageIds: string[] = safeParse(row.message_ids, []);
-  const removedIndicesArr: number[] = safeParse(row.removed_indices, []);
+  const fileNames: string[] = safeParseArray(row.file_names, []);
+  const messageIds: string[] = safeParseArray(row.message_ids, []);
+  const removedIndicesArr: number[] = safeParseArray(row.removed_indices, []);
 
   const formatParsed = FormatSchema.safeParse(row.format);
   const format = formatParsed.success ? formatParsed.data : "inline";
