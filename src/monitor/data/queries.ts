@@ -93,6 +93,9 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
   });
 
   const formatParsed = FormatSchema.safeParse(settings.format);
+  if (!formatParsed.success) {
+    log.warn({ format: settings.format, guildId }, "Unknown format value, defaulting to inline");
+  }
   const format = formatParsed.success ? formatParsed.data : "inline";
 
   return new MonitorsConfig({
@@ -442,7 +445,7 @@ export type PendingReviewInsert = {
   fileNames: string[];
   renderedContent: string;
   socialsChannelId: string;
-  format: string;
+  format: MonitorFormat;
   template: string;
   fetcherUserId: string;
 };

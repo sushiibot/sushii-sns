@@ -32,7 +32,7 @@ import {
 } from "./queries";
 import type { ReviewState } from "../service/review/types";
 
-export type { LastFetch, PostPostedCheck, PendingReviewInsert };
+export type { LastFetch, PostPostedCheck, PendingReviewInsert, GuildChannelSettings };
 
 function safeParseArray<T>(json: string, fallback: T[]): T[] {
   try {
@@ -56,7 +56,7 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
       postID: row.post_id,
       username: "",
       postLink: { url: "", metadata: { platform: row.connection_id.split(":")[0] } as any },
-      files: fileNames.map((name) => ({ ext: name.split(".").pop() ?? "bin", buffer: Buffer.alloc(0) })),
+      files: fileNames.map((name) => ({ ext: name.split(".").pop() || "bin", buffer: Buffer.alloc(0) })),
       originalText: "",
     },
     guildId: row.guild_id,
