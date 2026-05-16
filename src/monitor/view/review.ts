@@ -211,18 +211,73 @@ export function batchToMessageOptions(
 }
 
 /**
- * Edit a Components V2 review message down to a single status line (posting / posted / error).
- * Must keep {@link MessageFlags.IsComponentsV2} or Discord rejects the edit and the UI can stay stuck.
+ * Build edit options for the last batch that preserve full content (text + gallery)
+ * but replace interactive controls with a single disabled status button.
+ * Used for "⏳ Posting...", "✅ Posted", "❌ Failed" states — must not include
+ * `attachments: []` so existing message attachments (gallery images) are kept.
  */
-export function buildReviewStatusEditOptions(statusText: string): MessageEditOptions {
-  const container = new ContainerBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(statusText)
+export function buildReviewLastBatchStatusEdit(
+  state: ReviewState,
+  statusText: string,
+  postedUrl?: string,
+): MessageEditOptions {
+  const { fileNames, removedIndices, messageIds } = state;
+  const startIdx = (messageIds.length - 1) * MAX_ATTACHMENTS_PER_MESSAGE;
+  const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
+
+  if (startIdx === 0) {
+    const headerText = state.customContent ?? state.renderedContent;
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
+  }
+
+  if (fileNames.length > 0) {
+    const gallery = new MediaGalleryBuilder();
+    for (let i = startIdx; i < fileNames.length; i++) {
+      const isRemoved = removedIndices.has(i);
+      gallery.addItems(
+        new MediaGalleryItemBuilder()
+          .setURL(`attachment://${fileNames[i]}`)
+          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
+      );
+    }
+    container.addMediaGalleryComponents(gallery);
+  }
+
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
   );
+
+  if (postedUrl) {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel("View Post")
+          .setEmoji("🔗")
+          .setStyle(ButtonStyle.Link)
+          .setURL(postedUrl),
+        new ButtonBuilder()
+          .setCustomId("review:no-delete")
+          .setLabel("Do not delete — images linked here")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+      ),
+    );
+  } else {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("review:status")
+          .setLabel(statusText)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+      ),
+    );
+  }
+
   return {
     flags: MessageFlags.IsComponentsV2,
     components: [container] as MessageEditOptions["components"],
     content: null,
     embeds: [],
-    attachments: [],
   } as MessageEditOptions;
 }
