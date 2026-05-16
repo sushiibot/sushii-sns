@@ -114,7 +114,7 @@ export function buildSettingsPage(
         .setCustomId(SETUP_PANEL_CHANNEL_SELECT)
         .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setDefaultChannels(eff.panel_channel_id ? [eff.panel_channel_id] : [])
-        .setPlaceholder("Panel channel (where the poll panel lives)")
+        .setPlaceholder("Panel channel (where the monitor panel lives)")
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(disabled),
@@ -153,7 +153,7 @@ export function buildSettingsPage(
       new RoleSelectMenuBuilder()
         .setCustomId(SETUP_TRIGGER_ROLE_SELECT)
         .setDefaultRoles(eff.trigger_role_id ? [eff.trigger_role_id] : [])
-        .setPlaceholder("Allowed role — leave empty to allow anyone to poll")
+        .setPlaceholder("Allowed role — leave empty to allow anyone to refresh")
         .setMinValues(0)
         .setMaxValues(1)
         .setDisabled(disabled),

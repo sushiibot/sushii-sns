@@ -28,7 +28,7 @@ export async function registerSlashCommands(
         .addSubcommand((sub) =>
           sub
             .setName("refresh")
-            .setDescription("Re-send or refresh the poll panel (use if the panel message was deleted)"),
+            .setDescription("Re-send or refresh the monitor panel (use if the panel message was deleted)"),
         ),
     );
 
@@ -44,7 +44,7 @@ export async function registerSlashCommands(
   const fetchAllCommand = new SlashCommandBuilder()
     .setName("fetch-all")
     .setDescription(
-      "Poll every monitor connection, mark items as seen, refresh panel (no review messages)",
+      "Refresh every monitor connection, mark items as seen, update panel (no review messages)",
     )
     .setContexts(InteractionContextType.Guild)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
