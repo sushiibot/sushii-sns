@@ -95,12 +95,6 @@ export class PostHandler {
       return;
     }
 
-    const socialsChannel = await interaction.client.channels.fetch(config.socials_channel_id);
-    if (!socialsChannel || !socialsChannel.isSendable()) {
-      await interaction.editReply(editError("❌ Could not find the socials channel."));
-      return;
-    }
-
     try {
       const link = posts[0];
       const platform = link.metadata.platform;
@@ -145,6 +139,17 @@ export class PostHandler {
       const connectionIdForDb = trackInDb && connectionTypeParsed.success
         ? getConnectionId({ type: connectionTypeParsed.data, handle: postData.username! })
         : undefined;
+
+      const monitoredConnection = connectionTypeParsed.success && postData.username
+        ? config.connections.find((c) => c.type === connectionTypeParsed.data && c.handle === postData.username)
+        : undefined;
+      const targetChannelId = monitoredConnection?.target_channel_id ?? config.socials_channel_id;
+
+      const socialsChannel = await interaction.client.channels.fetch(targetChannelId);
+      if (!socialsChannel || !socialsChannel.isSendable()) {
+        await interaction.editReply(editError("❌ Could not find the socials channel."));
+        return;
+      }
 
       const result = await sendPostToChannel(socialsChannel, postData, {
         format: config.format,
