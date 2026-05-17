@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ContainerBuilder,
+  escapeMarkdown,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   MessageFlags,
@@ -145,9 +146,8 @@ function buildControlComponents(
   );
 
   if (state.fetcherUsername) {
-    const escapedName = state.fetcherUsername.replace(/[_*~`|]/g, "\\$&");
     container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`-# Fetched by ${escapedName}`)
+      new TextDisplayBuilder().setContent(`-# Fetched by ${escapeMarkdown(state.fetcherUsername)}`)
     );
   }
 
@@ -214,6 +214,7 @@ export function batchToMessageOptions(
     flags: MessageFlags.IsComponentsV2,
     files: batch.files,
     components: batch.components as MessageCreateOptions["components"],
+    allowedMentions: { parse: [] },
   };
 }
 
