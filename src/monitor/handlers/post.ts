@@ -29,12 +29,9 @@ export class PostHandler {
 
   async promptRepostConfirmation(
     interaction: ChatInputCommandInteraction,
-    socialsChannelId: string,
-    existingMessageId: string | null,
+    existingDiscordUrl: string | null,
   ): Promise<ConfirmationResult> {
-    const existingPostLink = existingMessageId && interaction.guildId
-      ? `\nhttps://discord.com/channels/${interaction.guildId}/${socialsChannelId}/${existingMessageId}`
-      : "";
+    const existingPostLink = existingDiscordUrl ? `\n${existingDiscordUrl}` : "";
 
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -201,7 +198,7 @@ export class PostHandler {
 
     const check = this.repo.checkIfPostWasPublished(guildId, connectionId, postId);
     if (check.wasPosted) {
-      const result = await this.promptRepostConfirmation(interaction, config.socials_channel_id, check.messageId);
+      const result = await this.promptRepostConfirmation(interaction, check.discordUrl);
       return result.confirmed;
     }
     return true;

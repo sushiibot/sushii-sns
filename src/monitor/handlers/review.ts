@@ -343,31 +343,35 @@ export class ReviewHandler {
         container.addMediaGalleryComponents(gallery);
       }
 
-      let sentMsgId: string | undefined;
+      let postedDiscordUrl: string | undefined;
       try {
         const sent = await channel.send({
           flags: MessageFlags.IsComponentsV2,
           components: [container],
         });
-        sentMsgId = sent.id;
+
+        // Construct the full Discord URL for this message.
+        const discordUrl = interaction.guildId
+          ? `https://discord.com/channels/${interaction.guildId}/${state.socialsChannelId}/${sent.id}`
+          : null;
+
+        if (discordUrl) {
+          postedDiscordUrl = discordUrl;
+        }
 
         // Record the posted message in the DB (equivalent to postTracking in sendPostToChannel).
-        if (state.postData.postID) {
+        if (state.postData.postID && discordUrl) {
           this.repo.recordPosted(
             state.guildId,
             state.connectionId,
             state.postData.postID,
-            sent.id,
+            discordUrl,
           );
         }
 
         // Persist the Discord URL so the review row is queryable after posting.
-        const postedUrlForDb =
-          interaction.guildId
-            ? `https://discord.com/channels/${interaction.guildId}/${state.socialsChannelId}/${sent.id}`
-            : null;
-        if (postedUrlForDb) {
-          this.repo.setReviewPostedUrl(reviewId, postedUrlForDb);
+        if (discordUrl) {
+          this.repo.setReviewPostedUrl(reviewId, discordUrl);
         }
       } catch (err) {
         log.error({ err, channelId: state.socialsChannelId }, "Failed to post to socials channel");
@@ -379,13 +383,7 @@ export class ReviewHandler {
         return;
       }
 
-      const guildId = interaction.guildId;
-      const postedUrl =
-        guildId && sentMsgId
-          ? `https://discord.com/channels/${guildId}/${state.socialsChannelId}/${sentMsgId}`
-          : undefined;
-
-      await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "✅ Posted!", postedUrl);
+      await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "✅ Posted!", postedDiscordUrl);
     } catch (err) {
       log.error({ err, channelId: state.socialsChannelId }, "Unexpected error in postReviewToSocials");
       await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "❌ Failed to post");

@@ -39,7 +39,7 @@ export const posts = sqliteTable(
     handle: text("handle").notNull(),
     postId: text("post_id").notNull(),
     seenAt: integer("seen_at").notNull(),
-    postedMessageId: text("posted_message_id"),
+    postedDiscordUrl: text("posted_discord_url"),
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.type, table.handle, table.postId] }),

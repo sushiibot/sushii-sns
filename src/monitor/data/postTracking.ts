@@ -7,6 +7,6 @@ export interface PostTrackingSink {
     guildId: string,
     connectionId: string,
     postId: string,
-    discordMessageId: string,
+    discordUrl: string,
   ): void;
 }

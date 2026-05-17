@@ -25,8 +25,8 @@ export type LastFetch = {
 };
 
 export type PostPostedCheck =
-  | { wasPosted: false; messageId: null }
-  | { wasPosted: true; messageId: string };
+  | { wasPosted: false; discordUrl: null }
+  | { wasPosted: true; discordUrl: string };
 
 export function openMetadataDb(path: string): BunSQLiteDatabase {
   const rawDb = new Database(path, { create: true });
@@ -343,10 +343,10 @@ export function checkIfPostWasPublished(
   postId: string,
 ): PostPostedCheck {
   const parts = parseConnectionId(connectionId);
-  if (!parts) return { wasPosted: false, messageId: null };
+  if (!parts) return { wasPosted: false, discordUrl: null };
 
   const row = db
-    .select({ postedMessageId: posts.postedMessageId })
+    .select({ postedDiscordUrl: posts.postedDiscordUrl })
     .from(posts)
     .where(
       and(
@@ -358,9 +358,9 @@ export function checkIfPostWasPublished(
     )
     .get();
 
-  const messageId = row?.postedMessageId ?? null;
-  if (messageId !== null) return { wasPosted: true, messageId };
-  return { wasPosted: false, messageId: null };
+  const discordUrl = row?.postedDiscordUrl ?? null;
+  if (discordUrl !== null) return { wasPosted: true, discordUrl };
+  return { wasPosted: false, discordUrl: null };
 }
 
 export function upsertPostedMessageTracking(
@@ -368,7 +368,7 @@ export function upsertPostedMessageTracking(
   guildId: string,
   connectionId: string,
   postId: string,
-  discordMessageId: string,
+  discordUrl: string,
 ): void {
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
@@ -381,11 +381,11 @@ export function upsertPostedMessageTracking(
       handle: parts.handle,
       postId,
       seenAt: now,
-      postedMessageId: discordMessageId,
+      postedDiscordUrl: discordUrl,
     })
     .onConflictDoUpdate({
       target: [posts.guildId, posts.type, posts.handle, posts.postId],
-      set: { postedMessageId: discordMessageId },
+      set: { postedDiscordUrl: discordUrl },
     })
     .run();
 }
@@ -404,7 +404,7 @@ export function purgeConnectionSeenPosts(
         eq(posts.guildId, guildId),
         eq(posts.type, parts.type),
         eq(posts.handle, parts.handle),
-        isNull(posts.postedMessageId),
+        isNull(posts.postedDiscordUrl),
       ),
     )
     .run();
@@ -412,7 +412,7 @@ export function purgeConnectionSeenPosts(
 
 export function purgeAllSeenPosts(db: BunSQLiteDatabase, guildId: string): void {
   db.delete(posts)
-    .where(and(eq(posts.guildId, guildId), isNull(posts.postedMessageId)))
+    .where(and(eq(posts.guildId, guildId), isNull(posts.postedDiscordUrl)))
     .run();
 }
 

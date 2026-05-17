@@ -249,11 +249,12 @@ export async function sendPostToChannel(
 
   if (postTracking && result.messageIds.length > 0) {
     try {
+      const discordUrl = `https://discord.com/channels/${postTracking.guildId}/${channel.id}/${result.messageIds[0]}`;
       postTracking.sink.recordPosted(
         postTracking.guildId,
         postTracking.connectionId,
         postTracking.postId,
-        result.messageIds[0],
+        discordUrl,
       );
     } catch (err) {
       log.error(err, "Failed to track posted message ID in DB");

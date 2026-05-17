@@ -124,8 +124,8 @@ export interface MonitorRepository extends PostTrackingSink {
 
 export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepository {
   return {
-    recordPosted(guildId, connectionId, postId, discordMessageId) {
-      upsertPostedMessageTracking(db, guildId, connectionId, postId, discordMessageId);
+    recordPosted(guildId, connectionId, postId, discordUrl) {
+      upsertPostedMessageTracking(db, guildId, connectionId, postId, discordUrl);
     },
 
     getConfig(guildId) {
