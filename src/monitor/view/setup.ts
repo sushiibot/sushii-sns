@@ -34,6 +34,7 @@ export const SETUP_NAV_CONNECTIONS = "monitor:setup:nav:connections";
 export const SETUP_NAV_SETTINGS = "monitor:setup:nav:settings";
 export const SETUP_ADD_CONNECTION_BTN = "monitor:setup:connection:add";
 export const SETUP_REMOVE_CONNECTION_PFX = "monitor:setup:connection:remove:";
+export const SETUP_CONNECTION_CHANNEL_PFX = "monitor:setup:connection:channel:";
 export const SETUP_TEMPLATE_MODAL = "monitor:setup:template:modal";
 export const SETUP_CONNECTION_ADD_MODAL = "monitor:setup:connection:add:modal";
 
@@ -218,10 +219,11 @@ export function buildConnectionsPage(
   const container = new ContainerBuilder();
 
   let header = `## 📋 Monitor Setup — Connections (${config.connections.length})\n`;
+  header += `\n📢 **Guild default channel:** <#${config.socials_channel_id}> — used for connections with no override`;
   if (config.connections.length === 0) {
-    header += "\n_No connections yet. Add one below._";
+    header += "\n\n_No connections yet. Add one below._";
   } else {
-    header += "\nClick **Remove** to delete a connection and reset its history.";
+    header += "\n\nClick **Remove** to delete a connection and reset its history.";
   }
 
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(header));
@@ -235,10 +237,12 @@ export function buildConnectionsPage(
 
     let label = `${emoji} **${platformLabel}** · @${conn.handle}`;
     if (conn.profile_name) label += ` · ${conn.profile_name}`;
+    if (conn.target_channel_id) {
+      label += ` → <#${conn.target_channel_id}>`;
+    } else {
+      label += " → guild default";
+    }
 
-    container.addSeparatorComponents(
-      new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small),
-    );
     container.addTextDisplayComponents(
       new TextDisplayBuilder().setContent(label),
     );
@@ -251,6 +255,19 @@ export function buildConnectionsPage(
 
     container.addActionRowComponents(
       new ActionRowBuilder<ButtonBuilder>().addComponents(removeBtn),
+    );
+
+    container.addActionRowComponents(
+      new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`${SETUP_CONNECTION_CHANNEL_PFX}${connId}`)
+          .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          .setDefaultChannels(conn.target_channel_id ? [conn.target_channel_id] : [])
+          .setPlaceholder("Override channel — leave empty to use guild default")
+          .setMinValues(0)
+          .setMaxValues(1)
+          .setDisabled(disabled),
+      ),
     );
   }
 
