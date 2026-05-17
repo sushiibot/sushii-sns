@@ -28,7 +28,6 @@ import type { GuildChannelSettings } from "../data/queries";
 
 export const SETUP_PANEL_CHANNEL_SELECT = "monitor:setup:panel_channel";
 export const SETUP_SOCIALS_CHANNEL_SELECT = "monitor:setup:socials_channel";
-export const SETUP_LOG_CHANNEL_SELECT = "monitor:setup:log_channel";
 export const SETUP_TRIGGER_ROLE_SELECT = "monitor:setup:trigger_role";
 export const SETUP_TEMPLATE_BTN = "monitor:setup:template";
 export const SETUP_NAV_CONNECTIONS = "monitor:setup:nav:connections";
@@ -84,7 +83,6 @@ export function buildSettingsPage(
     panel_channel_id: pending?.panel_channel_id ?? config?.panel_channel_id ?? null,
     socials_channel_id: pending?.socials_channel_id ?? config?.socials_channel_id ?? null,
     trigger_role_id: pending?.trigger_role_id ?? config?.trigger_role_id ?? null,
-    log_channel_id: pending?.log_channel_id ?? config?.log_channel_id ?? null,
     format: config?.format ?? "inline",
     template: config?.template ?? "",
   };
@@ -154,26 +152,6 @@ export function buildSettingsPage(
         .setCustomId(SETUP_TRIGGER_ROLE_SELECT)
         .setDefaultRoles(eff.trigger_role_id ? [eff.trigger_role_id] : [])
         .setPlaceholder("Allowed role — leave empty to allow anyone to refresh")
-        .setMinValues(0)
-        .setMaxValues(1)
-        .setDisabled(disabled),
-    ),
-  );
-
-  // --- Log channel ---
-  container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
-  container.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      `📋 **Log channel:** ${eff.log_channel_id ? `<#${eff.log_channel_id}>` : "_None_"}`,
-    ),
-  );
-  container.addActionRowComponents(
-    new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
-      new ChannelSelectMenuBuilder()
-        .setCustomId(SETUP_LOG_CHANNEL_SELECT)
-        .setChannelTypes(ChannelType.GuildText)
-        .setDefaultChannels(eff.log_channel_id ? [eff.log_channel_id] : [])
-        .setPlaceholder("Log channel — optional system logs")
         .setMinValues(0)
         .setMaxValues(1)
         .setDisabled(disabled),

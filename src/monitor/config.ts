@@ -20,7 +20,6 @@ export class MonitorsConfig {
   readonly panel_message_id: string | null;
   readonly socials_channel_id: string;
   readonly trigger_role_id: string | null;
-  readonly log_channel_id: string | null;
   readonly format: MonitorFormat;
   /** Raw stored template — empty string means "use default". */
   private readonly rawTemplate: string;
@@ -31,7 +30,6 @@ export class MonitorsConfig {
     panel_message_id: string | null;
     socials_channel_id: string;
     trigger_role_id: string | null;
-    log_channel_id: string | null;
     format: MonitorFormat;
     template: string;
     connections: Connection[];
@@ -40,7 +38,6 @@ export class MonitorsConfig {
     this.panel_message_id = data.panel_message_id;
     this.socials_channel_id = data.socials_channel_id;
     this.trigger_role_id = data.trigger_role_id;
-    this.log_channel_id = data.log_channel_id;
     this.format = data.format;
     this.rawTemplate = data.template;
     this.connections = data.connections;

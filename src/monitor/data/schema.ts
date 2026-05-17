@@ -6,7 +6,6 @@ export const guildSettings = sqliteTable("guild_settings", {
   panelMessageId: text("panel_message_id"),
   socialsChannelId: text("socials_channel_id").notNull(),
   triggerRoleId: text("trigger_role_id"),
-  logChannelId: text("log_channel_id"),
   format: text("format").notNull().default("inline"),
   template: text("template").notNull().default(""),
 });

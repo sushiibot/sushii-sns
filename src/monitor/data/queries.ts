@@ -58,7 +58,6 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
       panelMessageId: guildSettings.panelMessageId,
       socialsChannelId: guildSettings.socialsChannelId,
       triggerRoleId: guildSettings.triggerRoleId,
-      logChannelId: guildSettings.logChannelId,
       format: guildSettings.format,
       template: guildSettings.template,
     })
@@ -103,7 +102,6 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
     panel_message_id: settings.panelMessageId ?? null,
     socials_channel_id: settings.socialsChannelId,
     trigger_role_id: settings.triggerRoleId ?? null,
-    log_channel_id: settings.logChannelId ?? null,
     format,
     template: settings.template,
     connections,
@@ -112,7 +110,7 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
 
 export type GuildChannelSettings = Pick<
   MonitorsConfig,
-  "panel_channel_id" | "socials_channel_id" | "trigger_role_id" | "log_channel_id"
+  "panel_channel_id" | "socials_channel_id" | "trigger_role_id"
 >;
 
 export function upsertGuildSettings(
@@ -126,7 +124,6 @@ export function upsertGuildSettings(
       panelChannelId: settings.panel_channel_id,
       socialsChannelId: settings.socials_channel_id,
       triggerRoleId: settings.trigger_role_id,
-      logChannelId: settings.log_channel_id,
     })
     .onConflictDoUpdate({
       target: guildSettings.guildId,
@@ -134,7 +131,6 @@ export function upsertGuildSettings(
         panelChannelId: settings.panel_channel_id,
         socialsChannelId: settings.socials_channel_id,
         triggerRoleId: settings.trigger_role_id,
-        logChannelId: settings.log_channel_id,
       },
     })
     .run();

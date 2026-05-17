@@ -21,6 +21,7 @@ export interface ReviewState {
   format: "links" | "inline";
   template: string;
   fetcherUserId: string;
+  fetcherUsername: string | null;
   fileNames: string[];
   messageIds: string[];
 }

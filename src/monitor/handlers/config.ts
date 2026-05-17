@@ -21,7 +21,6 @@ import {
   pageToUpdateOptions,
   SETUP_ADD_CONNECTION_BTN,
   SETUP_CONNECTION_ADD_MODAL,
-  SETUP_LOG_CHANNEL_SELECT,
   SETUP_NAV_CONNECTIONS,
   SETUP_NAV_SETTINGS,
   SETUP_PANEL_CHANNEL_SELECT,
@@ -76,10 +75,10 @@ export class ConfigHandler {
     private readonly panelHandler: PanelHandler,
   ) {}
 
-  /** Extract the 4 GuildChannelSettings fields from a MonitorsConfig, with optional overrides. */
+  /** Extract GuildChannelSettings fields from a MonitorsConfig, with optional overrides. */
   private settingsFrom(config: GuildChannelSettings, overrides?: Partial<GuildChannelSettings>): GuildChannelSettings {
-    const { panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id } = config;
-    return { panel_channel_id, socials_channel_id, trigger_role_id, log_channel_id, ...overrides };
+    const { panel_channel_id, socials_channel_id, trigger_role_id } = config;
+    return { panel_channel_id, socials_channel_id, trigger_role_id, ...overrides };
   }
 
   // ---------------------------------------------------------------------------
@@ -245,7 +244,6 @@ export class ConfigHandler {
     let field: keyof GuildChannelSettings | null = null;
     if (customId === SETUP_PANEL_CHANNEL_SELECT) field = "panel_channel_id";
     else if (customId === SETUP_SOCIALS_CHANNEL_SELECT) field = "socials_channel_id";
-    else if (customId === SETUP_LOG_CHANNEL_SELECT) field = "log_channel_id";
 
     if (!field) {
       await interaction.deferUpdate();
@@ -287,7 +285,6 @@ export class ConfigHandler {
           panel_channel_id: newPending.panel_channel_id,
           socials_channel_id: newPending.socials_channel_id,
           trigger_role_id: newPending.trigger_role_id ?? null,
-          log_channel_id: newPending.log_channel_id ?? null,
         };
         this.repo.upsertSettings(guildId, settings);
         this.pendingSettings.delete(messageId);

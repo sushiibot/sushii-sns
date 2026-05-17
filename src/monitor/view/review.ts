@@ -144,6 +144,13 @@ function buildControlComponents(
     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
   );
 
+  if (state.fetcherUsername) {
+    const escapedName = state.fetcherUsername.replace(/[_*~`|]/g, "\\$&");
+    container.addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`-# Fetched by ${escapedName}`)
+    );
+  }
+
   if (allFileNames.length > 1) {
     const fileOptions = allFileNames.map((name, i) => {
       const ext = name.split(".").pop()?.toUpperCase() ?? "FILE";

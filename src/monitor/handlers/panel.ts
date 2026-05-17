@@ -19,7 +19,6 @@ import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
 import { batchToMessageOptions, buildReviewBatches } from "../view/review";
 import { syncAllMonitorConnections, fetchConnectionPosts, downloadFilesFromUrls } from "../service/fetch";
 import { seedConnection, type SeedResult } from "../service/seed";
-import { sendMonitorLog } from "../log_channel";
 import type { ReviewState } from "../service/review/types";
 import { ephemeralError, ephemeralWarn, editError, editSuccess, editInfo } from "../view/ephemeral";
 
@@ -109,20 +108,9 @@ export class PanelHandler {
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      await sendMonitorLog(
-        this.client,
-        config.log_channel_id,
-        `Poll started: \`${connectionId}\` by ${interaction.user.username}`,
-      );
-
-      await this.fetchConnectionAndCreateReviews(interaction, guildId, config, connectionId);
+      const fetcherUsername = getDisplayName(interaction);
+      await this.fetchConnectionAndCreateReviews(interaction, guildId, config, connectionId, fetcherUsername);
       await this.refreshPanelEmbed(guildId, config);
-
-      await sendMonitorLog(
-        this.client,
-        config.log_channel_id,
-        `Poll finished: \`${connectionId}\` by ${interaction.user.username}`,
-      );
     } finally {
       this.activeFetches.delete(connectionId);
     }
@@ -220,7 +208,6 @@ export class PanelHandler {
         lastFetchedBy: cmd.user.username,
       });
       await this.refreshPanelEmbed(guildId, config);
-      await sendMonitorLog(this.client, config.log_channel_id, `/fetch-all completed by ${cmd.user.username}`);
       await cmd.editReply(editSuccess("Finished refreshing all connections (items marked as seen). Monitor panel updated."));
     } catch (err) {
       log.error(err, "/fetch-all failed");
@@ -293,6 +280,7 @@ export class PanelHandler {
     guildId: string,
     config: MonitorsConfig,
     connectionId: string,
+    fetcherUsername: string,
   ): Promise<void> {
     const connection = findConnectionById(config, connectionId);
     if (!connection) {
@@ -317,7 +305,7 @@ export class PanelHandler {
     }
 
     if (posts.length === 0) {
-      this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
+      this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUsername);
       await interaction.editReply(editInfo(
         "No new posts found.\n\n" +
         "**Tip:** Only click Refresh once you've already gotten a notification in the app — that way you know there's actually something new to fetch.",
@@ -388,6 +376,7 @@ export class PanelHandler {
         format: config.format,
         template: config.template,
         fetcherUserId: interaction.user.id,
+        fetcherUsername,
         fileNames,
         messageIds: [],
       };
@@ -418,7 +407,7 @@ export class PanelHandler {
       }
     }
 
-    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), getDisplayName(interaction));
+    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUsername);
 
     if (connection.type === "instagram") {
       const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);
