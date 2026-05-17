@@ -188,3 +188,6 @@ data.db-shm
 # OpenSpec workflow
 openspec/
 
+
+# Claude Code internal files
+.claude/
