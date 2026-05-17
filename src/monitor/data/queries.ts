@@ -72,6 +72,7 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
       type: monitors.type,
       handle: monitors.handle,
       profileName: monitors.profileName,
+      targetChannelId: monitors.targetChannelId,
     })
     .from(monitors)
     .where(eq(monitors.guildId, guildId))
@@ -88,6 +89,7 @@ export function getMonitorsConfig(db: BunSQLiteDatabase, guildId: string): Monit
       type: typeParsed.data,
       handle: r.handle,
       profile_name: r.profileName ?? null,
+      target_channel_id: r.targetChannelId ?? null,
     }];
   });
 
@@ -171,6 +173,27 @@ export function addMonitor(db: BunSQLiteDatabase, guildId: string, connection: C
   } else {
     insert.onConflictDoNothing().run();
   }
+}
+
+export function setConnectionChannel(
+  db: BunSQLiteDatabase,
+  guildId: string,
+  connectionId: string,
+  channelId: string | null,
+): void {
+  const parts = parseConnectionId(connectionId);
+  if (!parts) return;
+
+  db.update(monitors)
+    .set({ targetChannelId: channelId })
+    .where(
+      and(
+        eq(monitors.guildId, guildId),
+        eq(monitors.type, parts.type),
+        eq(monitors.handle, parts.handle),
+      ),
+    )
+    .run();
 }
 
 export function setConnectionProfileName(

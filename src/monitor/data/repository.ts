@@ -16,6 +16,7 @@ import {
   purgeConnectionMeta,
   purgeConnectionSeenPosts,
   removeMonitor,
+  setConnectionChannel,
   setConnectionProfileName,
   updatePanelMessage,
   upsertConnectionMeta,
@@ -100,6 +101,7 @@ export interface MonitorRepository extends PostTrackingSink {
   addMonitor(guildId: string, connection: Connection): void;
   removeMonitor(guildId: string, type: string, handle: string): void;
   setProfileName(guildId: string, connectionId: string, profileName: string | null): void;
+  setConnectionChannel(guildId: string, connectionId: string, channelId: string | null): void;
 
   // Fetch state
   getConnectionMeta(guildId: string, connectionId: string): LastFetch | null;
@@ -149,6 +151,9 @@ export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepositor
     },
     setProfileName(guildId, connectionId, profileName) {
       setConnectionProfileName(db, guildId, connectionId, profileName);
+    },
+    setConnectionChannel(guildId, connectionId, channelId) {
+      setConnectionChannel(db, guildId, connectionId, channelId);
     },
 
     getConnectionMeta(guildId, connectionId) {

@@ -20,6 +20,7 @@ export const monitors = sqliteTable(
     lastFetchedAt: integer("last_fetched_at"),
     lastFetchedBy: text("last_fetched_by"),
     profileName: text("profile_name"),
+    targetChannelId: text("target_channel_id"),
   },
   (table) => [
     primaryKey({ columns: [table.guildId, table.type, table.handle] }),

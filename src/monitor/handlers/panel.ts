@@ -338,7 +338,7 @@ export class PanelHandler {
       postsToReview = posts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL);
     }
 
-    const socialsChannelId = config.socials_channel_id;
+    const socialsChannelId = connection.target_channel_id ?? config.socials_channel_id;
     let reviewCount = 0;
 
     for (const postData of postsToReview) {

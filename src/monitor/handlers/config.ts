@@ -21,6 +21,7 @@ import {
   pageToUpdateOptions,
   SETUP_ADD_CONNECTION_BTN,
   SETUP_CONNECTION_ADD_MODAL,
+  SETUP_CONNECTION_CHANNEL_PFX,
   SETUP_NAV_CONNECTIONS,
   SETUP_NAV_SETTINGS,
   SETUP_PANEL_CHANNEL_SELECT,
@@ -240,6 +241,19 @@ export class ConfigHandler {
     messageId: string,
   ): Promise<void> {
     const { customId } = interaction;
+
+    if (customId.startsWith(SETUP_CONNECTION_CHANNEL_PFX)) {
+      const connId = customId.slice(SETUP_CONNECTION_CHANNEL_PFX.length);
+      const channelId = interaction.values[0] ?? null;
+      this.repo.setConnectionChannel(guildId, connId, channelId);
+      const config = this.repo.getConfig(guildId);
+      if (!config) {
+        await interaction.deferUpdate();
+        return;
+      }
+      await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
+      return;
+    }
 
     let field: keyof GuildChannelSettings | null = null;
     if (customId === SETUP_PANEL_CHANNEL_SELECT) field = "panel_channel_id";

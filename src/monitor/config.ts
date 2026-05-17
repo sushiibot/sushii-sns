@@ -10,6 +10,7 @@ export const ConnectionSchema = z.object({
   type: ConnectionTypeSchema,
   handle: z.string().min(1),
   profile_name: z.string().nullable().optional(),
+  target_channel_id: z.string().nullable().optional(),
 });
 
 export type ConnectionType = z.infer<typeof ConnectionTypeSchema>;
