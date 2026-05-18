@@ -9,6 +9,7 @@ export const REVIEW_EDIT_PREFIX = "monitor:review:edit:";
 export const REVIEW_MODAL_PREFIX = "monitor:review:modal:";
 export const REVIEW_POST_PREFIX = "monitor:review:post:";
 export const REVIEW_SKIP_PREFIX = "monitor:review:skip:";
+export const REVIEW_UNDO_SKIP_PREFIX = "monitor:review:undo-skip:";
 
 export interface ReviewState {
   postData: PostData<AnySnsMetadata>;

@@ -28,6 +28,7 @@ import {
   updatePendingReview,
   deletePendingReview,
   setReviewStatus,
+  resetReviewStatus,
   setReviewPostedUrl,
   type GuildChannelSettings,
   type LastFetch,
@@ -122,6 +123,7 @@ export interface MonitorRepository extends PostTrackingSink {
   updatePendingReview(reviewId: string, updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] }): void;
   deletePendingReview(reviewId: string): void;
   setReviewStatus(reviewId: string, status: Exclude<ReviewStatus, "pending">): boolean;
+  resetReviewStatus(reviewId: string): boolean;
   setReviewPostedUrl(reviewId: string, postedDiscordUrl: string): void;
 }
 
@@ -201,6 +203,9 @@ export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepositor
     },
     setReviewStatus(reviewId, status) {
       return setReviewStatus(db, reviewId, status);
+    },
+    resetReviewStatus(reviewId) {
+      return resetReviewStatus(db, reviewId);
     },
     setReviewPostedUrl(reviewId, postedDiscordUrl) {
       setReviewPostedUrl(db, reviewId, postedDiscordUrl);

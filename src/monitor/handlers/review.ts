@@ -18,7 +18,7 @@ import {
   type TextBasedChannel,
 } from "discord.js";
 import logger from "../../logger";
-import { buildReviewBatches, buildReviewLastBatchStatusEdit } from "../view/review";
+import { buildReviewBatches, buildReviewLastBatchStatusEdit, buildSkippedEdit } from "../view/review";
 import type { PostQueue } from "../service/queue";
 import type { MonitorRepository } from "../data/repository";
 import {
@@ -242,9 +242,44 @@ export class ReviewHandler {
     const reviewChannel = interaction.channel;
     if (!reviewChannel || !reviewChannel.isTextBased()) return;
 
-    for (const msgId of state.messageIds) {
-      try { await reviewChannel.messages.delete(msgId); } catch { /* already gone */ }
+    const lastMsgId = state.messageIds.at(-1);
+    if (lastMsgId) {
+      try {
+        const msg = await reviewChannel.messages.fetch(lastMsgId);
+        await msg.edit(buildSkippedEdit(state, reviewId));
+      } catch (err) {
+        log.warn({ err, lastMsgId }, "Failed to update review to skipped state");
+      }
     }
+  }
+
+  async handleUndoSkip(
+    interaction: ButtonInteraction,
+    reviewId: string,
+  ): Promise<void> {
+    const state = this.repo.getPendingReview(reviewId);
+    if (!state) {
+      await interaction.reply(ephemeralError("This review has expired."));
+      return;
+    }
+
+    if (interaction.user.id !== state.fetcherUserId) {
+      await this.replyNotFetcher(interaction);
+      return;
+    }
+
+    const reset = this.repo.resetReviewStatus(reviewId);
+    if (!reset) {
+      await interaction.reply(ephemeralError("Could not undo skip — review may have already been posted."));
+      return;
+    }
+
+    await interaction.deferUpdate();
+
+    const reviewChannel = interaction.channel;
+    if (!reviewChannel || !reviewChannel.isTextBased()) return;
+
+    await this.editReviewMessages(reviewChannel, state, reviewId);
   }
 
 

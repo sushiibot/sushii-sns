@@ -581,6 +581,19 @@ export function setReviewStatus(
   return rows.length > 0;
 }
 
+export function resetReviewStatus(
+  db: BunSQLiteDatabase,
+  reviewId: string,
+): boolean {
+  const rows = db
+    .update(pendingReviews)
+    .set({ status: "pending" })
+    .where(and(eq(pendingReviews.reviewId, reviewId), eq(pendingReviews.status, "skipped")))
+    .returning({ reviewId: pendingReviews.reviewId })
+    .all();
+  return rows.length > 0;
+}
+
 export function setReviewPostedUrl(
   db: BunSQLiteDatabase,
   reviewId: string,

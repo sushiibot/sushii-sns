@@ -23,6 +23,7 @@ import {
   REVIEW_POST_PREFIX,
   REVIEW_REMOVE_PREFIX,
   REVIEW_SKIP_PREFIX,
+  REVIEW_UNDO_SKIP_PREFIX,
   type ReviewState,
 } from "../service/review/types";
 
@@ -281,6 +282,62 @@ export function buildReviewLastBatchStatusEdit(
       ),
     );
   }
+
+  return {
+    flags: MessageFlags.IsComponentsV2,
+    components: [container] as MessageEditOptions["components"],
+    content: null,
+    embeds: [],
+  } as MessageEditOptions;
+}
+
+/**
+ * Edit options for the last batch when a review has been skipped.
+ * Shows the content/gallery with a disabled "Skipped" label and an active "Undo Skip" button.
+ */
+export function buildSkippedEdit(
+  state: ReviewState,
+  reviewId: string,
+): MessageEditOptions {
+  const { fileNames, removedIndices, messageIds } = state;
+  const startIdx = (messageIds.length - 1) * MAX_ATTACHMENTS_PER_MESSAGE;
+  const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
+
+  if (startIdx === 0) {
+    const headerText = state.customContent ?? state.renderedContent;
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
+  }
+
+  if (fileNames.length > 0) {
+    const gallery = new MediaGalleryBuilder();
+    for (let i = startIdx; i < fileNames.length; i++) {
+      const isRemoved = removedIndices.has(i);
+      gallery.addItems(
+        new MediaGalleryItemBuilder()
+          .setURL(`attachment://${fileNames[i]}`)
+          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
+      );
+    }
+    container.addMediaGalleryComponents(gallery);
+  }
+
+  container.addSeparatorComponents(
+    new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+  );
+
+  container.addActionRowComponents(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("review:skipped-label")
+        .setLabel("⏭️ Skipped")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true),
+      new ButtonBuilder()
+        .setCustomId(`${REVIEW_UNDO_SKIP_PREFIX}${reviewId}`)
+        .setLabel("↩️ Undo Skip")
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  );
 
   return {
     flags: MessageFlags.IsComponentsV2,

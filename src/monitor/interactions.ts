@@ -12,6 +12,7 @@ import {
   REVIEW_POST_PREFIX,
   REVIEW_REMOVE_PREFIX,
   REVIEW_SKIP_PREFIX,
+  REVIEW_UNDO_SKIP_PREFIX,
 } from "./service/review/types";
 import type { PanelHandler } from "./handlers/panel";
 import type { ReviewHandler } from "./handlers/review";
@@ -66,6 +67,8 @@ export class InteractionDispatcher {
           await this.reviewHandler.handlePost(interaction, customId.slice(REVIEW_POST_PREFIX.length));
         } else if (customId.startsWith(REVIEW_SKIP_PREFIX)) {
           await this.reviewHandler.handleSkip(interaction, customId.slice(REVIEW_SKIP_PREFIX.length));
+        } else if (customId.startsWith(REVIEW_UNDO_SKIP_PREFIX)) {
+          await this.reviewHandler.handleUndoSkip(interaction, customId.slice(REVIEW_UNDO_SKIP_PREFIX.length));
         } else if (!customId.startsWith("monitor:setup")) {
           // Setup panel buttons are handled by their per-message collector — don't touch them here.
           // For any other unrecognised button, acknowledge to avoid "interaction failed".
