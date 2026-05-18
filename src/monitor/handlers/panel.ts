@@ -11,7 +11,14 @@ import {
 import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
+import dayjs from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
 import { buildInlineFormatContent } from "../../utils/template";
+import { KST_TIMEZONE } from "../../utils/discord";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import type { Connection, MonitorsConfig } from "../config";
 import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
@@ -24,6 +31,35 @@ import { ephemeralError, ephemeralWarn, editError, editSuccess, editInfo } from 
 
 const log = logger.child({ module: "monitor/handlers/panel" });
 
+
+/**
+ * Group Instagram stories by KST calendar day, merging each day's stories into a
+ * single synthetic PostData whose `files` array contains all media for that day.
+ * Stories without a timestamp are each kept as individual reviews.
+ */
+function groupStoriesByKstDay(
+  stories: PostData<AnySnsMetadata>[],
+): PostData<AnySnsMetadata>[] {
+  const byDay = new Map<string, PostData<AnySnsMetadata>[]>();
+  for (const story of stories) {
+    const key = story.timestamp
+      ? dayjs(story.timestamp).tz(KST_TIMEZONE).format("YYYY-MM-DD")
+      : `untimed-${story.postID}`;
+    const bucket = byDay.get(key) ?? [];
+    bucket.push(story);
+    byDay.set(key, bucket);
+  }
+
+  return Array.from(byDay.values()).map((dayStories) => {
+    if (dayStories.length === 1) { return dayStories[0]; }
+    const first = dayStories[0];
+    return {
+      ...first,
+      postID: dayStories.map((s) => s.postID).filter(Boolean).join("+"),
+      files: dayStories.flatMap((s) => s.files),
+    };
+  });
+}
 
 function getDisplayName(interaction: ButtonInteraction): string {
   const member = interaction.member;
@@ -322,6 +358,7 @@ export class PanelHandler {
     let postsToReview: PostData<AnySnsMetadata>[];
     let regularPosts: PostData<AnySnsMetadata>[] = [];
     let storiesCount = 0;
+    let storyGroupCount = 0;
 
     if (connection.type === "instagram") {
       const isInstagramStory = (p: PostData<AnySnsMetadata>): boolean =>
@@ -329,9 +366,11 @@ export class PanelHandler {
 
       const stories = posts.filter(isInstagramStory);
       storiesCount = stories.length;
+      const storyGroups = groupStoriesByKstDay(stories);
+      storyGroupCount = storyGroups.length;
       regularPosts = posts.filter((p) => !isInstagramStory(p));
       postsToReview = [
-        ...stories,
+        ...storyGroups,
         ...regularPosts.slice(0, PanelHandler.MAX_REVIEWS_PER_POLL),
       ];
     } else {
@@ -411,8 +450,15 @@ export class PanelHandler {
 
     if (connection.type === "instagram") {
       const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);
+      const storyPart = storiesCount > 0
+        ? `${storiesCount} ${storiesCount === 1 ? "story" : "stories"} (${storyGroupCount} ${storyGroupCount === 1 ? "day" : "days"})`
+        : null;
+      const postPart = regularCount > 0
+        ? `${regularCount} post${regularCount === 1 ? "" : "s"}`
+        : null;
+      const summary = [storyPart, postPart].filter(Boolean).join(" + ") || "0 posts";
       await interaction.editReply(
-        editSuccess(`Found ${storiesCount} ${storiesCount === 1 ? "story" : "stories"} + ${regularCount} post${regularCount === 1 ? "" : "s"}. Review messages created below.`),
+        editSuccess(`Found ${summary}. Review messages created below.`),
       );
     } else {
       await interaction.editReply(
