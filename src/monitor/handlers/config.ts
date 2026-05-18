@@ -122,8 +122,8 @@ export class ConfigHandler {
 
       // Track tab navigation
       if (interaction.isButton()) {
-        if (interaction.customId === SETUP_NAV_CONNECTIONS) currentTab = "connections";
-        else if (interaction.customId === SETUP_NAV_SETTINGS) currentTab = "settings";
+        if (interaction.customId === SETUP_NAV_CONNECTIONS) { currentTab = "connections"; }
+        else if (interaction.customId === SETUP_NAV_SETTINGS) { currentTab = "settings"; }
       }
 
       try {
