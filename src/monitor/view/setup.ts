@@ -234,7 +234,8 @@ export function buildConnectionsPage(
   const { disabled = false, expired = false } = opts;
   const totalConnections = config.connections.length;
   const totalPages = Math.ceil(totalConnections / CONNECTIONS_PER_PAGE);
-  const pageConnections = config.connections.slice(page * CONNECTIONS_PER_PAGE, page * CONNECTIONS_PER_PAGE + CONNECTIONS_PER_PAGE);
+  const start = page * CONNECTIONS_PER_PAGE;
+  const pageConnections = config.connections.slice(start, start + CONNECTIONS_PER_PAGE);
 
   const container = new ContainerBuilder();
 

@@ -152,9 +152,10 @@ export class ConfigHandler {
       try {
         const finalConfig = this.repo.getConfig(guildId);
         const expiredOpts = { disabled: true, expired: true };
+        const safePage = finalConfig ? Math.min(storedPage, lastPageIndex(finalConfig.connections.length)) : 0;
         const page =
           currentTab === "connections" && finalConfig
-            ? buildConnectionsPage(finalConfig, expiredOpts, storedPage)
+            ? buildConnectionsPage(finalConfig, expiredOpts, safePage)
             : buildSettingsPage(finalConfig, null, expiredOpts);
         await msg.edit(page);
       } catch { /* message may have been deleted */ }
@@ -275,11 +276,11 @@ export class ConfigHandler {
 
     await this.panelHandler.refreshPanelEmbed(guildId, config);
 
-    const msgId = interaction.message.id;
-    const currentPageNum = this.currentPage.get(msgId) ?? 0;
+    const messageId = interaction.message.id;
+    const currentPageNum = this.currentPage.get(messageId) ?? 0;
     const maxPage = lastPageIndex(config.connections.length);
     const newPage = Math.min(currentPageNum, maxPage);
-    this.currentPage.set(msgId, newPage);
+    this.currentPage.set(messageId, newPage);
     await interaction.update(pageToUpdateOptions(buildConnectionsPage(config, {}, newPage)));
   }
 
@@ -510,11 +511,9 @@ export class ConfigHandler {
     const seedSummary = `Found **${seed.count}** existing post${seed.count === 1 ? "" : "s"} — all marked as seen.`;
 
     if (fromMessage) {
-      const msgId = interaction.message.id;
+      const messageId = interaction.message.id;
       const newLastPage = lastPageIndex(config.connections.length);
-      if (this.currentPage.has(msgId)) {
-        this.currentPage.set(msgId, newLastPage);
-      }
+      this.currentPage.set(messageId, newLastPage);
       await interaction.editReply(pageToUpdateOptions(buildConnectionsPage(config, {}, newLastPage)));
       await interaction.followUp({
         content: `✅ Added \`${parsed.type}:${parsed.handle}\`. ${seedSummary}`,
