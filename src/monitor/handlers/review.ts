@@ -270,7 +270,7 @@ export class ReviewHandler {
 
     const reset = this.repo.resetReviewStatus(reviewId);
     if (!reset) {
-      await interaction.reply(ephemeralError("This review has already been handled."));
+      await interaction.reply(ephemeralError("This review is no longer in a skipped state."));
       return;
     }
 

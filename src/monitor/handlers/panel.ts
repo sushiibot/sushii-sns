@@ -17,10 +17,10 @@ import utc from "dayjs/plugin/utc";
 import { buildInlineFormatContent } from "../../utils/template";
 import { KST_TIMEZONE } from "../../utils/discord";
 import type { Connection, MonitorsConfig } from "../config";
+import { findConnectionById, getConnectionId } from "../config";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
 import { batchToMessageOptions, buildReviewBatches } from "../view/review";
@@ -42,6 +42,11 @@ function groupStoriesByKstDay(
 ): PostData<AnySnsMetadata>[] {
   const byDay = new Map<string, PostData<AnySnsMetadata>[]>();
   for (const story of stories) {
+    if (story.postID?.includes("+")) {
+      log.warn({ postID: story.postID }, "Story postID contains '+'; skipping merge for this story");
+      byDay.set(`no-merge-${story.postID}`, [story]);
+      continue;
+    }
     const key = story.timestamp
       ? dayjs(story.timestamp).tz(KST_TIMEZONE).format("YYYY-MM-DD")
       : `untimed-${randomUUID()}`;
