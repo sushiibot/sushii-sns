@@ -37,6 +37,19 @@ export const SETUP_REMOVE_CONNECTION_PFX = "monitor:setup:connection:remove:";
 export const SETUP_CONNECTION_CHANNEL_PFX = "monitor:setup:connection:channel:";
 export const SETUP_TEMPLATE_MODAL = "monitor:setup:template:modal";
 export const SETUP_CONNECTION_ADD_MODAL = "monitor:setup:connection:add:modal";
+export const SETUP_NAV_PAGE_PREV = "monitor:setup:nav:page:prev";
+export const SETUP_NAV_PAGE_NEXT = "monitor:setup:nav:page:next";
+
+// ---------------------------------------------------------------------------
+// Pagination helpers
+// ---------------------------------------------------------------------------
+
+export const CONNECTIONS_PER_PAGE = 5;
+
+/** Returns the last valid 0-based page index for a list of `count` connections. */
+export function lastPageIndex(count: number): number {
+  return Math.max(0, Math.ceil(count / CONNECTIONS_PER_PAGE) - 1);
+}
 
 // ---------------------------------------------------------------------------
 // Page builders
@@ -44,6 +57,7 @@ export const SETUP_CONNECTION_ADD_MODAL = "monitor:setup:connection:add:modal";
 
 export type SetupPageOptions = {
   disabled?: boolean;
+  expired?: boolean;
 };
 
 /**
@@ -78,7 +92,7 @@ export function buildSettingsPage(
   pending: Partial<GuildChannelSettings> | null,
   opts: SetupPageOptions = {},
 ): SetupPage {
-  const { disabled = false } = opts;
+  const { disabled = false, expired = false } = opts;
 
   const eff = {
     panel_channel_id: pending?.panel_channel_id ?? config?.panel_channel_id ?? null,
@@ -92,7 +106,9 @@ export function buildSettingsPage(
 
   // --- Header ---
   let header = "## 📋 Monitor Setup — Settings";
-  if (!eff.panel_channel_id || !eff.socials_channel_id) {
+  if (expired) {
+    header += "\n\n> ⏱️ This setup session has expired. Run `/monitor setup` to start a new one.";
+  } else if (!eff.panel_channel_id || !eff.socials_channel_id) {
     header += "\n\n> Select a **Panel channel** and a **Socials channel** below to get started.";
     if (eff.panel_channel_id && !eff.socials_channel_id) {
       header += `\n> Panel channel set to <#${eff.panel_channel_id}>. Now select the socials channel.`;
@@ -213,14 +229,23 @@ export function buildSettingsPage(
 export function buildConnectionsPage(
   config: MonitorsConfig,
   opts: SetupPageOptions = {},
+  page = 0,
 ): SetupPage {
-  const { disabled = false } = opts;
+  const { disabled = false, expired = false } = opts;
+  const totalConnections = config.connections.length;
+  const totalPages = Math.ceil(totalConnections / CONNECTIONS_PER_PAGE);
+  const pageConnections = config.connections.slice(page * CONNECTIONS_PER_PAGE, page * CONNECTIONS_PER_PAGE + CONNECTIONS_PER_PAGE);
 
   const container = new ContainerBuilder();
 
-  let header = `## 📋 Monitor Setup — Connections (${config.connections.length})\n`;
-  header += `\n📢 **Guild default channel:** <#${config.socials_channel_id}> — used for connections with no override`;
-  if (config.connections.length === 0) {
+  let header = `## 📋 Monitor Setup — Connections (${totalConnections})`;
+  if (totalPages > 1) {
+    header += ` — Page ${page + 1}/${totalPages}`;
+  }
+  header += `\n\n📢 **Guild default channel:** <#${config.socials_channel_id}> — used for connections with no override`;
+  if (expired) {
+    header += "\n\n> ⏱️ This setup session has expired. Run `/monitor setup` to start a new one.";
+  } else if (totalConnections === 0) {
     header += "\n\n_No connections yet. Add one below._";
   } else {
     header += "\n\nClick **Remove** to delete a connection and reset its history.";
@@ -228,7 +253,7 @@ export function buildConnectionsPage(
 
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(header));
 
-  for (const conn of config.connections) {
+  for (const conn of pageConnections) {
     const connId = getConnectionId(conn);
     const emoji =
       conn.type === "instagram" ? "📸" : conn.type === "tiktok" ? "🎵" : "🐦";
@@ -285,9 +310,27 @@ export function buildConnectionsPage(
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(disabled);
 
-  container.addActionRowComponents(
-    new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn),
-  );
+  if (totalConnections > CONNECTIONS_PER_PAGE) {
+    const prevBtn = new ButtonBuilder()
+      .setCustomId(SETUP_NAV_PAGE_PREV)
+      .setLabel("← Prev")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || page === 0);
+
+    const nextBtn = new ButtonBuilder()
+      .setCustomId(SETUP_NAV_PAGE_NEXT)
+      .setLabel("Next →")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || page >= totalPages - 1);
+
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn, prevBtn, nextBtn),
+    );
+  } else {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn),
+    );
+  }
 
   return {
     components: [container],

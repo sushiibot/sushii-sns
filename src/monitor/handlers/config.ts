@@ -18,11 +18,14 @@ import {
   buildConnectionsPage,
   buildSettingsPage,
   buildTemplateModal,
+  lastPageIndex,
   pageToUpdateOptions,
   SETUP_ADD_CONNECTION_BTN,
   SETUP_CONNECTION_ADD_MODAL,
   SETUP_CONNECTION_CHANNEL_PFX,
   SETUP_NAV_CONNECTIONS,
+  SETUP_NAV_PAGE_NEXT,
+  SETUP_NAV_PAGE_PREV,
   SETUP_NAV_SETTINGS,
   SETUP_PANEL_CHANNEL_SELECT,
   SETUP_REMOVE_CONNECTION_PFX,
@@ -68,6 +71,7 @@ export class ConfigHandler {
    * the same guild don't clobber each other's state.
    */
   private pendingSettings = new Map<string, Partial<GuildChannelSettings>>();
+  private currentPage = new Map<string, number>();
 
   private static readonly COLLECTOR_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -104,6 +108,8 @@ export class ConfigHandler {
   }
 
   private attachCollector(msg: Message, guildId: string, ownerId: string, messageId: string): void {
+    let currentTab: "settings" | "connections" = "settings";
+
     const collector = msg.createMessageComponentCollector({
       time: ConfigHandler.COLLECTOR_TIMEOUT_MS,
     });
@@ -112,6 +118,12 @@ export class ConfigHandler {
       if (interaction.user.id !== ownerId) {
         await interaction.reply({ ...ephemeralError("Only the person who opened this panel can use it.") });
         return;
+      }
+
+      // Track tab navigation
+      if (interaction.isButton()) {
+        if (interaction.customId === SETUP_NAV_CONNECTIONS) currentTab = "connections";
+        else if (interaction.customId === SETUP_NAV_SETTINGS) currentTab = "settings";
       }
 
       try {
@@ -132,14 +144,43 @@ export class ConfigHandler {
       }
     });
 
-    collector.once("end", async () => {
+    collector.once("end", async (_collected, reason) => {
       this.pendingSettings.delete(messageId);
+      const storedPage = this.currentPage.get(messageId) ?? 0;
+      this.currentPage.delete(messageId);
+      if (reason !== "time") return;
       try {
         const finalConfig = this.repo.getConfig(guildId);
-        const page = buildSettingsPage(finalConfig, null, { disabled: true });
+        const expiredOpts = { disabled: true, expired: true };
+        const page =
+          currentTab === "connections" && finalConfig
+            ? buildConnectionsPage(finalConfig, expiredOpts, storedPage)
+            : buildSettingsPage(finalConfig, null, expiredOpts);
         await msg.edit(page);
       } catch { /* message may have been deleted */ }
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Navigation helper
+  // ---------------------------------------------------------------------------
+
+  private async navigatePage(
+    interaction: ButtonInteraction,
+    guildId: string,
+    messageId: string,
+    computePage: (current: number, maxPage: number) => number,
+  ): Promise<void> {
+    const config = this.repo.getConfig(guildId);
+    if (!config) {
+      await interaction.reply({ ...ephemeralError("Config not found.") });
+      return;
+    }
+    const max = lastPageIndex(config.connections.length);
+    const current = this.currentPage.get(messageId) ?? 0;
+    const next = computePage(current, max);
+    this.currentPage.set(messageId, next);
+    await interaction.update(pageToUpdateOptions(buildConnectionsPage(config, {}, next)));
   }
 
   // ---------------------------------------------------------------------------
@@ -154,12 +195,17 @@ export class ConfigHandler {
     const { customId } = interaction;
 
     if (customId === SETUP_NAV_CONNECTIONS) {
-      const config = this.repo.getConfig(guildId);
-      if (!config) {
-        await interaction.reply({ ...ephemeralError("Save settings first.") });
-        return;
-      }
-      await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
+      await this.navigatePage(interaction, guildId, messageId, (current, max) => Math.min(current, max));
+      return;
+    }
+
+    if (customId === SETUP_NAV_PAGE_PREV) {
+      await this.navigatePage(interaction, guildId, messageId, (current) => Math.max(0, current - 1));
+      return;
+    }
+
+    if (customId === SETUP_NAV_PAGE_NEXT) {
+      await this.navigatePage(interaction, guildId, messageId, (current, max) => Math.min(max, current + 1));
       return;
     }
 
@@ -228,7 +274,13 @@ export class ConfigHandler {
     }
 
     await this.panelHandler.refreshPanelEmbed(guildId, config);
-    await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
+
+    const msgId = interaction.message.id;
+    const currentPageNum = this.currentPage.get(msgId) ?? 0;
+    const maxPage = lastPageIndex(config.connections.length);
+    const newPage = Math.min(currentPageNum, maxPage);
+    this.currentPage.set(msgId, newPage);
+    await interaction.update(pageToUpdateOptions(buildConnectionsPage(config, {}, newPage)));
   }
 
   // ---------------------------------------------------------------------------
@@ -251,7 +303,8 @@ export class ConfigHandler {
         await interaction.deferUpdate();
         return;
       }
-      await interaction.update(pageToUpdateOptions(buildConnectionsPage(config)));
+      const page = this.currentPage.get(messageId) ?? 0;
+      await interaction.update(pageToUpdateOptions(buildConnectionsPage(config, {}, page)));
       return;
     }
 
@@ -457,7 +510,12 @@ export class ConfigHandler {
     const seedSummary = `Found **${seed.count}** existing post${seed.count === 1 ? "" : "s"} — all marked as seen.`;
 
     if (fromMessage) {
-      await interaction.editReply(pageToUpdateOptions(buildConnectionsPage(config)));
+      const msgId = interaction.message.id;
+      const newLastPage = lastPageIndex(config.connections.length);
+      if (this.currentPage.has(msgId)) {
+        this.currentPage.set(msgId, newLastPage);
+      }
+      await interaction.editReply(pageToUpdateOptions(buildConnectionsPage(config, {}, newLastPage)));
       await interaction.followUp({
         content: `✅ Added \`${parsed.type}:${parsed.handle}\`. ${seedSummary}`,
         flags: MessageFlags.Ephemeral,
