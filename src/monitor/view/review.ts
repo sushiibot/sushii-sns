@@ -105,11 +105,9 @@ function buildSimpleComponents(
     if (globalIdx >= allFileNames.length) break;
 
     const isRemoved = state.removedIndices.has(globalIdx);
-    gallery.addItems(
-      new MediaGalleryItemBuilder()
-        .setURL(`attachment://${allFileNames[globalIdx]}`)
-        .setDescription(isRemoved ? `❌ Image ${globalIdx + 1} — removing` : `Image ${globalIdx + 1}`)
-    );
+    const item = new MediaGalleryItemBuilder().setURL(`attachment://${allFileNames[globalIdx]}`);
+    if (isRemoved) { item.setDescription(`❌ Image ${globalIdx + 1} — removing`); }
+    gallery.addItems(item);
   }
   container.addMediaGalleryComponents(gallery);
 
@@ -133,11 +131,9 @@ function buildControlComponents(
     const gallery = new MediaGalleryBuilder();
     for (let i = startIdx; i < allFileNames.length; i++) {
       const isRemoved = state.removedIndices.has(i);
-      gallery.addItems(
-        new MediaGalleryItemBuilder()
-          .setURL(`attachment://${allFileNames[i]}`)
-          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
-      );
+      const item = new MediaGalleryItemBuilder().setURL(`attachment://${allFileNames[i]}`);
+      if (isRemoved) { item.setDescription(`❌ Image ${i + 1} — removing`); }
+      gallery.addItems(item);
     }
     container.addMediaGalleryComponents(gallery);
   }
@@ -243,11 +239,9 @@ export function buildReviewLastBatchStatusEdit(
     const gallery = new MediaGalleryBuilder();
     for (let i = startIdx; i < fileNames.length; i++) {
       const isRemoved = removedIndices.has(i);
-      gallery.addItems(
-        new MediaGalleryItemBuilder()
-          .setURL(`attachment://${fileNames[i]}`)
-          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
-      );
+      const item = new MediaGalleryItemBuilder().setURL(`attachment://${fileNames[i]}`);
+      if (isRemoved) { item.setDescription(`❌ Image ${i + 1} — removing`); }
+      gallery.addItems(item);
     }
     container.addMediaGalleryComponents(gallery);
   }
@@ -312,11 +306,9 @@ export function buildSkippedEdit(
     const gallery = new MediaGalleryBuilder();
     for (let i = startIdx; i < fileNames.length; i++) {
       const isRemoved = removedIndices.has(i);
-      gallery.addItems(
-        new MediaGalleryItemBuilder()
-          .setURL(`attachment://${fileNames[i]}`)
-          .setDescription(isRemoved ? `❌ Image ${i + 1} — removing` : `Image ${i + 1}`)
-      );
+      const item = new MediaGalleryItemBuilder().setURL(`attachment://${fileNames[i]}`);
+      if (isRemoved) { item.setDescription(`❌ Image ${i + 1} — removing`); }
+      gallery.addItems(item);
     }
     container.addMediaGalleryComponents(gallery);
   }
