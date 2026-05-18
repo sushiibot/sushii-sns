@@ -9,6 +9,7 @@ import {
   MessageFlags,
   ModalBuilder,
   RoleSelectMenuBuilder,
+  SectionBuilder,
   SeparatorBuilder,
   SeparatorSpacingSize,
   StringSelectMenuBuilder,
@@ -269,18 +270,16 @@ export function buildConnectionsPage(
       label += " → guild default";
     }
 
-    container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(label),
-    );
-
     const removeBtn = new ButtonBuilder()
       .setCustomId(`${SETUP_REMOVE_CONNECTION_PFX}${connId}`)
       .setLabel("Remove")
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled);
 
-    container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(removeBtn),
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(label))
+        .setButtonAccessory(removeBtn),
     );
 
     container.addActionRowComponents(
@@ -325,13 +324,13 @@ export function buildConnectionsPage(
       .setDisabled(disabled || page >= totalPages - 1);
 
     container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn, prevBtn, nextBtn),
-    );
-  } else {
-    container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(prevBtn, nextBtn),
     );
   }
+
+  container.addActionRowComponents(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(addBtn, settingsBtn),
+  );
 
   return {
     components: [container],

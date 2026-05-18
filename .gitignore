@@ -191,3 +191,5 @@ openspec/
 
 # Claude Code internal files
 .claude/
+.playwright-mcp/
+preview-screenshot*.png
