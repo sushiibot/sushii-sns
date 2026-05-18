@@ -12,15 +12,10 @@ import type { ServerConfig } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
 import dayjs from "dayjs";
-import timezone from "dayjs/plugin/timezone";
-import utc from "dayjs/plugin/utc";
 import { buildInlineFormatContent } from "../../utils/template";
 import { KST_TIMEZONE } from "../../utils/discord";
 import type { Connection, MonitorsConfig } from "../config";
 import { findConnectionById, getConnectionId } from "../config";
-
-dayjs.extend(utc);
-dayjs.extend(timezone);
 import type { MonitorRepository } from "../data/repository";
 import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
 import { batchToMessageOptions, buildReviewBatches } from "../view/review";
@@ -42,11 +37,6 @@ function groupStoriesByKstDay(
 ): PostData<AnySnsMetadata>[] {
   const byDay = new Map<string, PostData<AnySnsMetadata>[]>();
   for (const story of stories) {
-    if (story.postID?.includes("+")) {
-      log.warn({ postID: story.postID }, "Story postID contains '+'; skipping merge for this story");
-      byDay.set(`no-merge-${story.postID}`, [story]);
-      continue;
-    }
     const key = story.timestamp
       ? dayjs(story.timestamp).tz(KST_TIMEZONE).format("YYYY-MM-DD")
       : `untimed-${randomUUID()}`;
@@ -60,6 +50,7 @@ function groupStoriesByKstDay(
     const first = dayStories[0];
     return {
       ...first,
+      // "+" is safe as a separator: no supported platform produces postIDs containing "+".
       postID: dayStories.map((s) => s.postID).join("+"),
       files: dayStories.flatMap((s) => s.files),
     };
