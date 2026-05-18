@@ -216,22 +216,16 @@ export function batchToMessageOptions(
 }
 
 /**
- * Build edit options for the last batch that preserve full content (text + gallery)
- * but replace interactive controls with a single disabled status button.
- * Used for "⏳ Posting...", "✅ Posted", "❌ Failed" states — must not include
- * `attachments: []` so existing message attachments (gallery images) are kept.
+ * Build a ContainerBuilder with the last batch's header (if first batch), gallery,
+ * and a separator — shared scaffolding for status-edit and skipped-edit functions.
  */
-export function buildReviewLastBatchStatusEdit(
-  state: ReviewState,
-  statusText: string,
-  postedUrl?: string,
-): MessageEditOptions {
-  const { fileNames, removedIndices, messageIds } = state;
+function buildLastBatchContainer(state: ReviewState): ContainerBuilder {
+  const { fileNames, removedIndices, messageIds, customContent, renderedContent } = state;
   const startIdx = (messageIds.length - 1) * MAX_ATTACHMENTS_PER_MESSAGE;
   const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
 
   if (startIdx === 0) {
-    const headerText = state.customContent ?? state.renderedContent;
+    const headerText = customContent ?? renderedContent;
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
   }
 
@@ -249,6 +243,22 @@ export function buildReviewLastBatchStatusEdit(
   container.addSeparatorComponents(
     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
   );
+
+  return container;
+}
+
+/**
+ * Build edit options for the last batch that preserve full content (text + gallery)
+ * but replace interactive controls with a single disabled status button.
+ * Used for "⏳ Posting...", "✅ Posted", "❌ Failed" states — must not include
+ * `attachments: []` so existing message attachments (gallery images) are kept.
+ */
+export function buildReviewLastBatchStatusEdit(
+  state: ReviewState,
+  statusText: string,
+  postedUrl?: string,
+): MessageEditOptions {
+  const container = buildLastBatchContainer(state);
 
   if (postedUrl) {
     container.addActionRowComponents(
@@ -293,34 +303,13 @@ export function buildSkippedEdit(
   state: ReviewState,
   reviewId: string,
 ): MessageEditOptions {
-  const { fileNames, removedIndices, messageIds } = state;
-  const startIdx = (messageIds.length - 1) * MAX_ATTACHMENTS_PER_MESSAGE;
-  const container = new ContainerBuilder().setAccentColor(ACCENT_BLUE);
-
-  if (startIdx === 0) {
-    const headerText = state.customContent ?? state.renderedContent;
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerText));
-  }
-
-  if (fileNames.length > 0) {
-    const gallery = new MediaGalleryBuilder();
-    for (let i = startIdx; i < fileNames.length; i++) {
-      const isRemoved = removedIndices.has(i);
-      const item = new MediaGalleryItemBuilder().setURL(`attachment://${fileNames[i]}`);
-      if (isRemoved) { item.setDescription(`❌ Image ${i + 1} — removing`); }
-      gallery.addItems(item);
-    }
-    container.addMediaGalleryComponents(gallery);
-  }
-
-  container.addSeparatorComponents(
-    new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
-  );
+  const SKIPPED_LABEL_ID = "review:skipped-label";
+  const container = buildLastBatchContainer(state);
 
   container.addActionRowComponents(
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId("review:skipped-label")
+        .setCustomId(SKIPPED_LABEL_ID)
         .setLabel("⏭️ Skipped")
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(true),

@@ -16,10 +16,10 @@ import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 import { buildInlineFormatContent } from "../../utils/template";
 import { KST_TIMEZONE } from "../../utils/discord";
+import type { Connection, MonitorsConfig } from "../config";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-import type { Connection, MonitorsConfig } from "../config";
 import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
 import { buildPanelEmbed, type PanelConnectionMeta } from "../view/panel";
@@ -44,7 +44,7 @@ function groupStoriesByKstDay(
   for (const story of stories) {
     const key = story.timestamp
       ? dayjs(story.timestamp).tz(KST_TIMEZONE).format("YYYY-MM-DD")
-      : `untimed-${story.postID}`;
+      : `untimed-${randomUUID()}`;
     const bucket = byDay.get(key) ?? [];
     bucket.push(story);
     byDay.set(key, bucket);
@@ -55,7 +55,7 @@ function groupStoriesByKstDay(
     const first = dayStories[0];
     return {
       ...first,
-      postID: dayStories.map((s) => s.postID).filter(Boolean).join("+"),
+      postID: dayStories.map((s) => s.postID).join("+"),
       files: dayStories.flatMap((s) => s.files),
     };
   });

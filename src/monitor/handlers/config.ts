@@ -276,12 +276,7 @@ export class ConfigHandler {
 
     await this.panelHandler.refreshPanelEmbed(guildId, config);
 
-    const messageId = interaction.message.id;
-    const currentPageNum = this.currentPage.get(messageId) ?? 0;
-    const maxPage = lastPageIndex(config.connections.length);
-    const newPage = Math.min(currentPageNum, maxPage);
-    this.currentPage.set(messageId, newPage);
-    await interaction.update(pageToUpdateOptions(buildConnectionsPage(config, {}, newPage)));
+    await this.navigatePage(interaction, guildId, interaction.message.id, (current, max) => Math.min(current, max));
   }
 
   // ---------------------------------------------------------------------------

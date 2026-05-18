@@ -189,7 +189,7 @@ export class ReviewHandler {
 
     // Immediately replace buttons with a disabled "Posting..." indicator so
     // the message stays readable while the queue job runs.
-    const lastMsgId = state.messageIds[state.messageIds.length - 1];
+    const lastMsgId = state.messageIds.at(-1);
     if (lastMsgId) {
       try {
         const lastMsg = await reviewChannel.messages.fetch(lastMsgId);
@@ -270,7 +270,7 @@ export class ReviewHandler {
 
     const reset = this.repo.resetReviewStatus(reviewId);
     if (!reset) {
-      await interaction.reply(ephemeralError("Could not undo skip — review may have already been posted."));
+      await interaction.reply(ephemeralError("This review has already been handled."));
       return;
     }
 
@@ -396,12 +396,11 @@ export class ReviewHandler {
 
         // Record the posted message in the DB (equivalent to postTracking in sendPostToChannel).
         if (state.postData.postID && discordUrl) {
-          this.repo.recordPosted(
-            state.guildId,
-            state.connectionId,
-            state.postData.postID,
-            discordUrl,
-          );
+          // postID may be a "+"-joined composite for merged story groups — record each.
+          const postIds = state.postData.postID.split("+").filter(Boolean);
+          for (const postId of postIds) {
+            this.repo.recordPosted(state.guildId, state.connectionId, postId, discordUrl);
+          }
         }
 
         // Persist the Discord URL so the review row is queryable after posting.
