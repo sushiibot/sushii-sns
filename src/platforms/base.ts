@@ -13,7 +13,7 @@ export function platformToString(platform: Platform): string {
     case "instagram":
       return "Instagram";
     case "instagram-story":
-      return "Instagram";
+      return "Instagram Story";
     case "tiktok":
       return "TikTok";
   }
