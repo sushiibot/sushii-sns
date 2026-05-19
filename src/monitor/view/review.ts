@@ -4,7 +4,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ContainerBuilder,
-  escapeMarkdown,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   MessageFlags,
@@ -142,11 +141,13 @@ function buildControlComponents(
     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
   );
 
-  if (state.fetcherUsername) {
-    container.addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`-# Fetched by ${escapeMarkdown(state.fetcherUsername)}`)
-    );
-  }
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`-# Posts to <#${state.socialsChannelId}>`)
+  );
+
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`-# Fetched by <@${state.fetcherUserId}>`)
+  );
 
   if (allFileNames.length > 1) {
     const fileOptions = allFileNames.map((name, i) => {

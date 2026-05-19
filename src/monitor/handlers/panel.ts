@@ -411,7 +411,6 @@ export class PanelHandler {
         format: config.format,
         template: config.template,
         fetcherUserId: interaction.user.id,
-        fetcherUsername,
         fileNames,
         messageIds: [],
       };

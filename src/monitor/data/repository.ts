@@ -83,7 +83,6 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
     format,
     template: row.template,
     fetcherUserId: row.fetcher_user_id,
-    fetcherUsername: null,
     fileNames,
     messageIds,
   };
