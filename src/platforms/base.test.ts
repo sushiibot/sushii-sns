@@ -10,8 +10,8 @@ describe("platformToString", () => {
     expect(platformToString("instagram")).toBe("Instagram");
   });
 
-  it("maps instagram-story to Instagram (same label as posts)", () => {
-    expect(platformToString("instagram-story")).toBe("Instagram");
+  it("maps instagram-story to Instagram Story", () => {
+    expect(platformToString("instagram-story")).toBe("Instagram Story");
   });
 
   it("maps tiktok", () => {
