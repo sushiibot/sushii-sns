@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ContainerBuilder,
+  GuildMember,
   MediaGalleryBuilder,
   MediaGalleryItemBuilder,
   MessageFlags,
@@ -37,11 +38,18 @@ export class ReviewHandler {
     private readonly repo: MonitorRepository,
   ) {}
 
-  private async replyNotFetcher(
-    interaction: RepliableInteraction,
-  ): Promise<void> {
+  private isAuthorized(interaction: RepliableInteraction, triggerRoleId: string | null): boolean {
+    if (!triggerRoleId) return true;
+    const member = interaction.member;
+    if (!member) return false;
+    return member instanceof GuildMember
+      ? member.roles.cache.has(triggerRoleId)
+      : Array.isArray(member.roles) && member.roles.includes(triggerRoleId);
+  }
+
+  private async replyUnauthorized(interaction: RepliableInteraction): Promise<void> {
     await interaction.reply({
-      content: "Only the person who triggered the fetch can interact.",
+      content: "You don't have the required role to do this.",
       flags: MessageFlags.Ephemeral,
     });
   }
@@ -57,8 +65,9 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const removeConfig = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, removeConfig?.trigger_role_id ?? null)) {
+      await this.replyUnauthorized(interaction);
       return;
     }
 
@@ -87,8 +96,9 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const editConfig = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, editConfig?.trigger_role_id ?? null)) {
+      await this.replyUnauthorized(interaction);
       return;
     }
 
@@ -120,8 +130,9 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const modalConfig = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, modalConfig?.trigger_role_id ?? null)) {
+      await this.replyUnauthorized(interaction);
       return;
     }
 
@@ -157,8 +168,9 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const postConfig = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, postConfig?.trigger_role_id ?? null)) {
+      await this.replyUnauthorized(interaction);
       return;
     }
 
@@ -226,8 +238,12 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const config = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, config?.trigger_role_id ?? null)) {
+      await interaction.reply({
+        content: "You don't have the required role to do this.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
@@ -263,8 +279,12 @@ export class ReviewHandler {
       return;
     }
 
-    if (interaction.user.id !== state.fetcherUserId) {
-      await this.replyNotFetcher(interaction);
+    const config = this.repo.getConfig(state.guildId);
+    if (!this.isAuthorized(interaction, config?.trigger_role_id ?? null)) {
+      await interaction.reply({
+        content: "You don't have the required role to do this.",
+        flags: MessageFlags.Ephemeral,
+      });
       return;
     }
 
@@ -344,6 +364,8 @@ export class ReviewHandler {
       for (const msgId of state.messageIds) {
         try {
           const msg = await reviewChannel.messages.fetch(msgId);
+          const attNames = [...msg.attachments.values()].map(a => a.name);
+          log.info({ msgId, attachmentCount: msg.attachments.size, attNames }, "Fetched review message attachments");
           for (const att of msg.attachments.values()) {
             const match = att.name?.match(/^media-(\d+)\./);
             if (match) {
@@ -357,10 +379,17 @@ export class ReviewHandler {
 
       const keptUrls: string[] = [];
       for (let i = 0; i < state.fileNames.length; i++) {
-        if (!state.removedIndices.has(i)) {
-          const url = attachmentUrlMap.get(i);
-          if (url) keptUrls.push(url);
-        }
+        if (state.removedIndices.has(i)) continue;
+        const url = attachmentUrlMap.get(i);
+        if (url) keptUrls.push(url);
+      }
+
+      log.info({ reviewId, total: state.fileNames.length, kept: keptUrls.length, removed: state.removedIndices.size }, "Collected CDN URLs for post");
+
+      if (state.fileNames.length > 0 && keptUrls.length === 0) {
+        log.error({ reviewId, fileNames: state.fileNames }, "No CDN URLs collected — attachments may have been stripped by a prior edit");
+        await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "❌ Failed — images unavailable");
+        return;
       }
 
       const content = state.customContent ?? state.renderedContent;

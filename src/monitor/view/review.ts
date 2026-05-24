@@ -251,8 +251,7 @@ function buildLastBatchContainer(state: ReviewState): ContainerBuilder {
 /**
  * Build edit options for the last batch that preserve full content (text + gallery)
  * but replace interactive controls with a single disabled status button.
- * Used for "⏳ Posting...", "✅ Posted", "❌ Failed" states — must not include
- * `attachments: []` so existing message attachments (gallery images) are kept.
+ * Used for "⏳ Posting...", "✅ Posted", "❌ Failed" states.
  */
 export function buildReviewLastBatchStatusEdit(
   state: ReviewState,
