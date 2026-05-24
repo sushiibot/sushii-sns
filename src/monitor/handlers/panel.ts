@@ -413,20 +413,24 @@ export class PanelHandler {
         fetcherUserId: interaction.user.id,
         fileNames,
         messageIds: [],
+        cdnUrls: [],
       };
 
       try {
         const batches = buildReviewBatches(reviewState, reviewId);
         const messageIds: string[] = [];
+        const cdnUrls: string[] = new Array(fileNames.length).fill("");
 
-        for (const batch of batches) {
-          const msg = await reviewChannel.send(
-            batchToMessageOptions(batch),
-          );
+        for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+          const msg = await reviewChannel.send(batchToMessageOptions(batches[batchIdx]));
           messageIds.push(msg.id);
+          for (const att of msg.attachments.values()) {
+            const match = att.name?.match(/^media-(\d+)\./);
+            if (match) cdnUrls[parseInt(match[1], 10)] = att.url;
+          }
         }
 
-        this.repo.updatePendingReview(reviewId, { messageIds });
+        this.repo.updatePendingReview(reviewId, { messageIds, cdnUrls });
 
         // Free buffers now that images are uploaded to Discord.
         // buildReviewBatches still uses postData.files.length for chunking — empty

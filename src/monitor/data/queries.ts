@@ -462,6 +462,7 @@ export type PendingReviewRow = {
   created_at: number;
   status: ReviewStatus;
   posted_discord_url: string | null;
+  cdn_urls: string | null;  // JSON string array, indexed by file position
 };
 
 export type PendingReviewInsert = {
@@ -534,15 +535,16 @@ export function getPendingReview(db: BunSQLiteDatabase, reviewId: string): Pendi
     created_at: row.createdAt,
     status: row.status as ReviewStatus,
     posted_discord_url: row.postedDiscordUrl,
+    cdn_urls: row.cdnUrls ?? null,
   };
 }
 
 export function updatePendingReview(
   db: BunSQLiteDatabase,
   reviewId: string,
-  updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] },
+  updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[]; cdnUrls?: string[] },
 ): void {
-  const set: Partial<Pick<typeof pendingReviews.$inferInsert, "removedIndices" | "customContent" | "messageIds">> = {};
+  const set: Partial<Pick<typeof pendingReviews.$inferInsert, "removedIndices" | "customContent" | "messageIds" | "cdnUrls">> = {};
 
   if (updates.removedIndices !== undefined) {
     set.removedIndices = JSON.stringify(updates.removedIndices);
@@ -553,6 +555,9 @@ export function updatePendingReview(
   }
   if (updates.messageIds !== undefined) {
     set.messageIds = JSON.stringify(updates.messageIds);
+  }
+  if (updates.cdnUrls !== undefined) {
+    set.cdnUrls = JSON.stringify(updates.cdnUrls);
   }
 
   if (Object.keys(set).length === 0) return;

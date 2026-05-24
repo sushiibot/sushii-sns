@@ -63,6 +63,8 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
   }
   const format = formatParsed.success ? formatParsed.data : "inline";
 
+  const cdnUrls: string[] = safeParseArray(row.cdn_urls ?? "[]", []);
+
   return {
     postData: {
       postID: row.post_id,
@@ -85,6 +87,7 @@ function rowToReviewState(row: PendingReviewRow): ReviewState {
     fetcherUserId: row.fetcher_user_id,
     fileNames,
     messageIds,
+    cdnUrls,
   };
 }
 
@@ -119,7 +122,7 @@ export interface MonitorRepository extends PostTrackingSink {
   // Pending reviews
   insertPendingReview(r: PendingReviewInsert): void;
   getPendingReview(reviewId: string): ReviewState | null;
-  updatePendingReview(reviewId: string, updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[] }): void;
+  updatePendingReview(reviewId: string, updates: { removedIndices?: number[]; customContent?: string | null; messageIds?: string[]; cdnUrls?: string[] }): void;
   deletePendingReview(reviewId: string): void;
   setReviewStatus(reviewId: string, status: Exclude<ReviewStatus, "pending">): boolean;
   resetReviewStatus(reviewId: string): boolean;

@@ -358,36 +358,17 @@ export class ReviewHandler {
         return;
       }
 
-      // Collect CDN attachment URLs from the review messages (fetching refreshes signed URLs).
-      // Map: file index → CDN URL, extracted from attachment filenames like "media-0.jpg".
-      const attachmentUrlMap = new Map<number, string>();
-      for (const msgId of state.messageIds) {
-        try {
-          const msg = await reviewChannel.messages.fetch(msgId);
-          const attNames = [...msg.attachments.values()].map(a => a.name);
-          log.info({ msgId, attachmentCount: msg.attachments.size, attNames }, "Fetched review message attachments");
-          for (const att of msg.attachments.values()) {
-            const match = att.name?.match(/^media-(\d+)\./);
-            if (match) {
-              attachmentUrlMap.set(parseInt(match[1], 10), att.url);
-            }
-          }
-        } catch (err) {
-          log.warn({ err, msgId }, "Failed to fetch review message for CDN URLs");
-        }
-      }
-
       const keptUrls: string[] = [];
       for (let i = 0; i < state.fileNames.length; i++) {
         if (state.removedIndices.has(i)) continue;
-        const url = attachmentUrlMap.get(i);
+        const url = state.cdnUrls[i];
         if (url) keptUrls.push(url);
       }
 
       log.info({ reviewId, total: state.fileNames.length, kept: keptUrls.length, removed: state.removedIndices.size }, "Collected CDN URLs for post");
 
       if (state.fileNames.length > 0 && keptUrls.length === 0) {
-        log.error({ reviewId, fileNames: state.fileNames }, "No CDN URLs collected — attachments may have been stripped by a prior edit");
+        log.error({ reviewId, fileNames: state.fileNames }, "No CDN URLs found — review may predate CDN URL storage");
         await this.updateLastBatchStatus(reviewChannel, state, lastMsgId, "❌ Failed — images unavailable");
         return;
       }

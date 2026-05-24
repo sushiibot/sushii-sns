@@ -24,4 +24,5 @@ export interface ReviewState {
   fetcherUserId: string;
   fileNames: string[];
   messageIds: string[];
+  cdnUrls: string[];  // indexed by file position; populated after review messages are sent
 }
