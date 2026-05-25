@@ -108,9 +108,10 @@ export async function syncAllMonitorConnections(
   guildId: string,
   connections: Connection[],
   monitorRepo: MonitorRepository,
-  opts?: { lastFetchedBy?: string },
+  opts?: { lastFetchedBy?: string; lastFetchedByName?: string | null },
 ): Promise<void> {
   const lastFetchedBy = opts?.lastFetchedBy ?? "fetch-all";
+  const lastFetchedByName = opts?.lastFetchedByName ?? null;
   const now = Date.now();
 
   for (const connection of connections) {
@@ -129,7 +130,7 @@ export async function syncAllMonitorConnections(
         storiesMarkSeenOnly: true,
       });
 
-      monitorRepo.upsertConnectionMeta(guildId, connectionId, now, lastFetchedBy);
+      monitorRepo.upsertConnectionMeta(guildId, connectionId, now, lastFetchedBy, lastFetchedByName);
     } catch (err) {
       log.error({ err, connectionId }, "fetch-all: connection sync failed");
     }

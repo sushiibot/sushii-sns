@@ -24,6 +24,7 @@ type PanelMessage = {
   components: ContainerBuilder[];
   flags: number;
   embeds: [];
+  allowedMentions: { parse: [] };
 };
 
 function typeToEmoji(connectionId: string): string {
@@ -77,7 +78,9 @@ export function buildPanelEmbed(
       let statusLine: string;
       if (c.lastFetch) {
         const lastFetchedSec = Math.floor(c.lastFetch.last_fetched_at / 1000);
-        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: <t:${lastFetchedSec}:R> by ${c.lastFetch.last_fetched_by}`;
+        const name = c.lastFetch.last_fetched_by_name ?? "";
+        const nameStr = name ? `${name} ` : "";
+        statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: <t:${lastFetchedSec}:R> by ${nameStr}<@${c.lastFetch.last_fetched_by}>`;
       } else {
         statusLine = `${typeToEmoji(c.connectionId)} **${c.label}**\nLast fetched: Never`;
       }
@@ -102,5 +105,6 @@ export function buildPanelEmbed(
     components: [container],
     flags: MessageFlags.IsComponentsV2,
     embeds: [],
+    allowedMentions: { parse: [] },
   };
 }

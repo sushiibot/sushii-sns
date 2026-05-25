@@ -57,11 +57,6 @@ function groupStoriesByKstDay(
   });
 }
 
-function getDisplayName(interaction: ButtonInteraction): string {
-  const member = interaction.member;
-  if (member instanceof GuildMember) return member.displayName;
-  return interaction.user.displayName;
-}
 
 export class PanelHandler {
   // Per-connection lock set — prevents concurrent fetches for the same connection
@@ -140,8 +135,7 @@ export class PanelHandler {
     try {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      const fetcherUsername = getDisplayName(interaction);
-      await this.fetchConnectionAndCreateReviews(interaction, guildId, config, connectionId, fetcherUsername);
+      await this.fetchConnectionAndCreateReviews(interaction, guildId, config, connectionId, interaction.user.id);
       await this.refreshPanelEmbed(guildId, config);
     } finally {
       this.activeFetches.delete(connectionId);
@@ -237,7 +231,8 @@ export class PanelHandler {
     );
     try {
       await syncAllMonitorConnections(guildId, lockedConnections, this.repo, {
-        lastFetchedBy: cmd.user.username,
+        lastFetchedBy: cmd.user.id,
+        lastFetchedByName: cmd.user.globalName,
       });
       await this.refreshPanelEmbed(guildId, config);
       await cmd.editReply(editSuccess("Finished refreshing all connections (items marked as seen). Monitor panel updated."));
@@ -284,7 +279,8 @@ export class PanelHandler {
   async seedNewConnection(
     guildId: string,
     connection: Connection,
-    username: string,
+    userId: string,
+    userName: string | null,
   ): Promise<SeedResult> {
     const connectionId = getConnectionId(connection);
     const result = await seedConnection(
@@ -292,7 +288,7 @@ export class PanelHandler {
       (id) => this.repo.isPostSeen(guildId, connectionId, id),
       (id) => this.repo.markPostSeen(guildId, connectionId, id),
     );
-    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), username);
+    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), userId, userName);
     return result;
   }
 
@@ -312,7 +308,7 @@ export class PanelHandler {
     guildId: string,
     config: MonitorsConfig,
     connectionId: string,
-    fetcherUsername: string,
+    fetcherUserId: string,
   ): Promise<void> {
     const connection = findConnectionById(config, connectionId);
     if (!connection) {
@@ -337,7 +333,7 @@ export class PanelHandler {
     }
 
     if (posts.length === 0) {
-      this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUsername);
+      this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUserId, interaction.user.globalName);
       await interaction.editReply(editInfo(
         "No new posts found.\n\n" +
         "**Tip:** Only click Refresh once you've already gotten a notification in the app — that way you know there's actually something new to fetch.",
@@ -445,7 +441,7 @@ export class PanelHandler {
       }
     }
 
-    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUsername);
+    this.repo.upsertConnectionMeta(guildId, connectionId, Date.now(), fetcherUserId, interaction.user.globalName);
 
     if (connection.type === "instagram") {
       const regularCount = Math.min(regularPosts.length, PanelHandler.MAX_REVIEWS_PER_POLL);

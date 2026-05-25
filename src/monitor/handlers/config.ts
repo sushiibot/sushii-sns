@@ -473,7 +473,7 @@ export class ConfigHandler {
     // If the API call fails (bad handle, private account, etc.), roll back.
     let seed: { count: number; profileName: string | null };
     try {
-      seed = await this.panelHandler.seedNewConnection(guildId, newConnection, interaction.user.username);
+      seed = await this.panelHandler.seedNewConnection(guildId, newConnection, interaction.user.id, interaction.user.globalName);
     } catch (err) {
       log.warn({ err, guildId, ...parsed }, "Seed failed for new connection — rolling back");
       try { this.repo.removeMonitor(guildId, parsed.type, parsed.handle); } catch { /* ignore */ }
