@@ -22,6 +22,7 @@ const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "../../..
 export type LastFetch = {
   last_fetched_at: number;
   last_fetched_by: string;
+  last_fetched_by_name: string | null;
 };
 
 export type PostPostedCheck =
@@ -245,6 +246,7 @@ export function getConnectionMeta(
     .select({
       lastFetchedAt: monitors.lastFetchedAt,
       lastFetchedBy: monitors.lastFetchedBy,
+      lastFetchedByName: monitors.lastFetchedByName,
     })
     .from(monitors)
     .where(
@@ -257,7 +259,11 @@ export function getConnectionMeta(
     .get();
 
   if (!row || row.lastFetchedAt === null || row.lastFetchedBy === null) return null;
-  return { last_fetched_at: row.lastFetchedAt, last_fetched_by: row.lastFetchedBy };
+  return {
+    last_fetched_at: row.lastFetchedAt,
+    last_fetched_by: row.lastFetchedBy,
+    last_fetched_by_name: row.lastFetchedByName ?? null,
+  };
 }
 
 export function upsertConnectionMeta(
@@ -266,12 +272,13 @@ export function upsertConnectionMeta(
   connectionId: string,
   lastFetchedAt: number,
   lastFetchedBy: string,
+  lastFetchedByName: string | null,
 ): void {
   const parts = parseConnectionId(connectionId);
   if (!parts) return;
 
   db.update(monitors)
-    .set({ lastFetchedAt, lastFetchedBy })
+    .set({ lastFetchedAt, lastFetchedBy, lastFetchedByName })
     .where(
       and(
         eq(monitors.guildId, guildId),
@@ -287,7 +294,7 @@ export function purgeConnectionMeta(db: BunSQLiteDatabase, guildId: string, conn
   if (!parts) return;
 
   db.update(monitors)
-    .set({ lastFetchedAt: null, lastFetchedBy: null })
+    .set({ lastFetchedAt: null, lastFetchedBy: null, lastFetchedByName: null })
     .where(
       and(
         eq(monitors.guildId, guildId),
@@ -300,7 +307,7 @@ export function purgeConnectionMeta(db: BunSQLiteDatabase, guildId: string, conn
 
 export function purgeAllConnectionMeta(db: BunSQLiteDatabase, guildId: string): void {
   db.update(monitors)
-    .set({ lastFetchedAt: null, lastFetchedBy: null })
+    .set({ lastFetchedAt: null, lastFetchedBy: null, lastFetchedByName: null })
     .where(eq(monitors.guildId, guildId))
     .run();
 }

@@ -19,6 +19,7 @@ export const monitors = sqliteTable(
     igId: text("ig_id"),
     lastFetchedAt: integer("last_fetched_at"),
     lastFetchedBy: text("last_fetched_by"),
+    lastFetchedByName: text("last_fetched_by_name"),
     profileName: text("profile_name"),
     targetChannelId: text("target_channel_id"),
   },

@@ -108,7 +108,7 @@ export interface MonitorRepository extends PostTrackingSink {
 
   // Fetch state
   getConnectionMeta(guildId: string, connectionId: string): LastFetch | null;
-  upsertConnectionMeta(guildId: string, connectionId: string, lastFetchedAt: number, lastFetchedBy: string): void;
+  upsertConnectionMeta(guildId: string, connectionId: string, lastFetchedAt: number, lastFetchedBy: string, lastFetchedByName: string | null): void;
   purgeConnectionMeta(guildId: string, connectionId: string): void;
   purgeAllConnectionMeta(guildId: string): void;
 
@@ -163,8 +163,8 @@ export function createMonitorRepository(db: BunSQLiteDatabase): MonitorRepositor
     getConnectionMeta(guildId, connectionId) {
       return getConnectionMeta(db, guildId, connectionId);
     },
-    upsertConnectionMeta(guildId, connectionId, lastFetchedAt, lastFetchedBy) {
-      upsertConnectionMeta(db, guildId, connectionId, lastFetchedAt, lastFetchedBy);
+    upsertConnectionMeta(guildId, connectionId, lastFetchedAt, lastFetchedBy, lastFetchedByName) {
+      upsertConnectionMeta(db, guildId, connectionId, lastFetchedAt, lastFetchedBy, lastFetchedByName);
     },
     purgeConnectionMeta(guildId, connectionId) {
       purgeConnectionMeta(db, guildId, connectionId);
