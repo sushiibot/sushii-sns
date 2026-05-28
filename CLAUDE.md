@@ -26,6 +26,16 @@ Discord bot that downloads social media (Twitter/X, Instagram posts/reels/storie
 
 **Config**: Zod-validated env in `src/config/config.ts`. Optional per-guild message templates via `SERVER_CONFIG_PATH` → `src/config/server_config.ts`.
 
+## Database Migrations
+
+Migrations live in `drizzle/migrations/`. Always generate them with drizzle-kit — never hand-write them:
+
+```bash
+bunx drizzle-kit generate
+```
+
+**Why**: drizzle's migrator skips any migration whose `when` timestamp in `_journal.json` is ≤ the `created_at` of the last applied migration in `__drizzle_migrations`. Hand-written migrations with fake/past timestamps will silently never run, causing `no such column` errors at runtime.
+
 ## Docs
 
 - [docs/architecture.md](docs/architecture.md) — file map, HTTP routes, env vars
