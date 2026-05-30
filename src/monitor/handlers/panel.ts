@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { RESTJSONErrorCodes } from "discord-api-types/v10";
+import { ComponentType, RESTJSONErrorCodes } from "discord-api-types/v10";
 import {
   DiscordAPIError,
   GuildMember,
@@ -13,7 +13,7 @@ import logger from "../../logger";
 import type { AnySnsMetadata, PostData, SnsMetadata } from "../../platforms/base";
 import dayjs from "dayjs";
 import { buildInlineFormatContent } from "../../utils/template";
-import { KST_TIMEZONE } from "../../utils/discord";
+import { KST_TIMEZONE, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import type { Connection, MonitorsConfig } from "../config";
 import { findConnectionById, getConnectionId } from "../config";
 import type { MonitorRepository } from "../data/repository";
@@ -420,9 +420,31 @@ export class PanelHandler {
         for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
           const msg = await reviewChannel.send(batchToMessageOptions(batches[batchIdx]));
           messageIds.push(msg.id);
-          for (const att of msg.attachments.values()) {
-            const match = att.name?.match(/^media-(\d+)\./);
-            if (match) cdnUrls[parseInt(match[1], 10)] = att.url;
+
+          // Discord does not populate msg.attachments for Components V2 messages.
+          // Extract resolved CDN URLs from the media gallery items in components instead.
+          const startIdx = batchIdx * MAX_ATTACHMENTS_PER_MESSAGE;
+          let galleryItemIdx = 0;
+          for (const component of msg.components) {
+            if (component.type !== ComponentType.Container) continue;
+            for (const sub of component.components) {
+              if (sub.type !== ComponentType.MediaGallery) continue;
+              for (const item of sub.items) {
+                const url = item.media.url;
+                if (url && !url.startsWith("attachment://")) {
+                  cdnUrls[startIdx + galleryItemIdx] = url;
+                }
+                galleryItemIdx++;
+              }
+            }
+          }
+
+          // Fallback: try attachments (works for non-V2 messages)
+          if (galleryItemIdx === 0) {
+            for (const att of msg.attachments.values()) {
+              const match = att.name?.match(/^media-(\d+)\./);
+              if (match) cdnUrls[parseInt(match[1], 10)] = att.url;
+            }
           }
         }
 
