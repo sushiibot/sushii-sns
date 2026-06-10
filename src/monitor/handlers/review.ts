@@ -27,6 +27,7 @@ import {
   type ReviewState,
 } from "../service/review/types";
 import { ephemeralError } from "../view/ephemeral";
+import { chunkArray, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 
 const log = logger.child({ module: "monitor/handlers/review" });
 
@@ -381,11 +382,13 @@ export class ReviewHandler {
         container.addSeparatorComponents(
           new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
         );
-        const gallery = new MediaGalleryBuilder();
-        for (const url of keptUrls) {
-          gallery.addItems(new MediaGalleryItemBuilder().setURL(url));
+        for (const chunk of chunkArray(keptUrls, MAX_ATTACHMENTS_PER_MESSAGE)) {
+          const gallery = new MediaGalleryBuilder();
+          for (const url of chunk) {
+            gallery.addItems(new MediaGalleryItemBuilder().setURL(url));
+          }
+          container.addMediaGalleryComponents(gallery);
         }
-        container.addMediaGalleryComponents(gallery);
       }
 
       let postedDiscordUrl: string | undefined;
