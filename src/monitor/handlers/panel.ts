@@ -68,6 +68,7 @@ export class PanelHandler {
   private static readonly MAX_REVIEWS_PER_POLL = 3;
   private static readonly MAX_STORIES_PER_POLL = 10;
   private static readonly POLL_COOLDOWN_MS = 30_000;
+  private static readonly POLL_CUTOFF_DAYS = 7;
 
   constructor(
     private readonly repo: MonitorRepository,
@@ -320,11 +321,13 @@ export class PanelHandler {
 
     let posts: PostData<AnySnsMetadata>[] = [];
     try {
+      const cutoffDate = new Date(Date.now() - PanelHandler.POLL_CUTOFF_DAYS * 24 * 60 * 60 * 1000);
       posts = await fetchConnectionPosts(connection, downloadFilesFromUrls, {
         isPostSeen: (id) => this.repo.isPostSeen(guildId, connectionId, id),
         markPostSeen: (id) => this.repo.markPostSeen(guildId, connectionId, id),
         limit: PanelHandler.MAX_REVIEWS_PER_POLL,
         storiesLimit: PanelHandler.MAX_STORIES_PER_POLL,
+        cutoffDate,
       });
     } catch (err) {
       log.error({ err, connectionId }, "Failed to fetch connection posts");

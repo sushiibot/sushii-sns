@@ -74,21 +74,25 @@ export async function fetchConnectionPosts(
     storiesMarkSeenOnly?: boolean;
     profileMarkSeenOnly?: boolean;
     markSeenOnly?: boolean;
+    /** Exclude posts older than this date. Already-downloaded old posts are still marked seen. */
+    cutoffDate?: Date;
   },
 ): Promise<PostData<AnySnsMetadata>[]> {
+  let posts: PostData<AnySnsMetadata>[];
+
   if (connection.type === "instagram") {
     const igOpts = {
       ...seenOpts,
       profileMarkSeenOnly: seenOpts.profileMarkSeenOnly ?? seenOpts.markSeenOnly ?? false,
     };
-    return fetchInstagramConnectionPosts(connection.handle, downloadFn, igOpts);
+    posts = await fetchInstagramConnectionPosts(connection.handle, downloadFn, igOpts);
   } else if (connection.type === "tiktok") {
-    return fetchTiktokFeed(connection.handle, downloadFn, {
+    posts = await fetchTiktokFeed(connection.handle, downloadFn, {
       ...seenOpts,
       markSeenOnly: seenOpts.markSeenOnly ?? false,
     });
   } else if (connection.type === "twitter") {
-    return fetchTwitterFeedRapidApi(connection.handle, downloadFn, {
+    posts = await fetchTwitterFeedRapidApi(connection.handle, downloadFn, {
       ...seenOpts,
       markSeenOnly: seenOpts.markSeenOnly ?? false,
     });
@@ -97,6 +101,13 @@ export async function fetchConnectionPosts(
     log.warn({ type: _exhaustive }, "Unknown connection type in fetchConnectionPosts — no posts fetched");
     return [];
   }
+
+  const { cutoffDate } = seenOpts;
+  if (cutoffDate) {
+    posts = posts.filter((p) => !p.timestamp || p.timestamp >= cutoffDate);
+  }
+
+  return posts;
 }
 
 /**
