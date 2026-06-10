@@ -1,5 +1,5 @@
 import { SpanStatusCode } from "@opentelemetry/api";
-import { type Attachment, type Message } from "discord.js";
+import { type Message } from "discord.js";
 import logger from "../logger";
 import {
   SnsDownloader,
@@ -15,7 +15,12 @@ import { TikTokDownloader } from "../platforms/tiktok/downloader";
 import { TwitterDownloader } from "../platforms/twitter/downloader";
 import { tracer } from "../tracing";
 import { formatSnsErrorForUser } from "./snsErrors";
-import { getGuildTemplate, type ServerConfig } from "../config/server_config";
+import type { ServerConfig } from "../config/server_config";
+import { sendPostToChannel } from "../utils/discord";
+
+export interface MonitorConfigProvider {
+  getConfig(guildId: string): { format: "inline" | "links"; template: string } | null;
+}
 
 const log = logger.child({ module: "snsHandler" });
 
@@ -88,7 +93,7 @@ export async function* snsService(
   }
 }
 
-export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig | null): Promise<void> {
+export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig | null, monitorConfig?: MonitorConfigProvider): Promise<void> {
   if (!msg.channel.isSendable()) {
     return;
   }
@@ -178,32 +183,16 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
     },
     async (span) => {
       try {
+        const guildMonitorConfig = monitorConfig?.getConfig(msg.guildId);
+        const format = guildMonitorConfig?.format ?? "links";
+        const template = guildMonitorConfig?.template;
+
         for await (const postDatas of snsService(posts, progressUpdater)) {
           for (const postData of postDatas) {
-            const platform = getPlatform(postData.postLink.metadata);
-
-            // 1. Send images first
-            // 2. Get the links to images
-            // 3. Send the message with the links
-            const fileMsgs = platform.buildDiscordAttachments(postData);
-
-            const attachments: Attachment[] = [];
-
-            for (const fileMsg of fileMsgs) {
-              const filesMsg = await msg.channel.send(fileMsg);
-              attachments.push(...filesMsg.attachments.values());
-            }
-
-            const links = attachments.map((attachment) => attachment.url);
-            const template = getGuildTemplate(serverConfig, msg.guildId);
-            const msgs = platform.buildDiscordMessages(postData, links, template);
-
-            for (const postMsg of msgs) {
-              await msg.reply({
-                ...postMsg,
-                allowedMentions: { parse: [] },
-              });
-            }
+            await sendPostToChannel(msg.channel, postData, {
+              format,
+              template,
+            });
           }
         }
       } catch (err) {

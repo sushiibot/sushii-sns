@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, async (message) => {
-    await MessageCreateHandler(message, serverConfig);
+    await MessageCreateHandler(message, serverConfig, monitor.repo);
   });
 
   // Always register commands — all slash commands (monitor, post, fetch-all)

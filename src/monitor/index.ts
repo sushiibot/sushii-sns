@@ -29,5 +29,6 @@ export function createMonitor(
 
   return {
     handleInteraction: dispatcher.handleInteraction.bind(dispatcher),
+    repo,
   };
 }
