@@ -37,7 +37,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   PLATFORM: Platform = "instagram";
 
   URL_REGEX = new RegExp(
-    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\//gi,
+    /https?:\/\/(?:www\.)?instagram\.com\/(?:([\w.]+)\/reels?\/|(?:p|reels?|tv)\/)([\w-]+)\/?/gi,
   );
 
   protected createLinkFromMatch(
