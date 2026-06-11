@@ -87,6 +87,36 @@ export class MediaTooLargeError extends Error {
   }
 }
 
+function buildAttachmentName(
+  postData: PostData<AnySnsMetadata>,
+  index: number,
+  ext: string,
+): string {
+  const { metadata } = postData.postLink;
+  const platform = metadata.platform;
+  const i = index + 1;
+
+  if (platform === "instagram-story") {
+    const ts = postData.timestamp
+      ? dayjs(postData.timestamp).tz(KST_TIMEZONE).format("YYMMDD")
+      : null;
+    return ts
+      ? `ig-story-${postData.username}-${ts}-${i}.${ext}`
+      : `ig-story-${postData.username}-${i}.${ext}`;
+  }
+
+  if (platform === "instagram") {
+    return `ig-${postData.username}-${postData.postID}-${i}.${ext}`;
+  }
+
+  if (platform === "tiktok") {
+    return `tiktok-${postData.username}-${postData.postID}-${i}.${ext}`;
+  }
+
+  // twitter
+  return `twitter-${postData.username}-${postData.postID}-${i}.${ext}`;
+}
+
 function validateFileSizes(files: PostData<AnySnsMetadata>["files"]): void {
   for (let i = 0; i < files.length; i++) {
     const size = files[i].buffer.byteLength;
@@ -178,7 +208,7 @@ export async function sendPostToChannel(
         ? contentOverride
         : buildInlineFormatContent(template ?? "", postData as any);
     const attachments = files.map((f, i) =>
-      new AttachmentBuilder(f.buffer).setName(`media-${i}.${f.ext}`)
+      new AttachmentBuilder(f.buffer).setName(buildAttachmentName(postData, i, f.ext))
     );
     const chunks = chunkArray(attachments, MAX_ATTACHMENTS_PER_MESSAGE);
 
@@ -207,7 +237,7 @@ export async function sendPostToChannel(
   } else {
     // === LINKS FORMAT: upload attachments → get CDN URLs → send text with URLs ===
     const attachments = files.map((f, i) =>
-      new AttachmentBuilder(f.buffer).setName(`media-${i}.${f.ext}`)
+      new AttachmentBuilder(f.buffer).setName(buildAttachmentName(postData, i, f.ext))
     );
     const chunks = chunkArray(attachments, MAX_ATTACHMENTS_PER_MESSAGE);
     const cdnUrls: string[] = [];
