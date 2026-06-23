@@ -21,7 +21,6 @@ dayjs.extend(timezone);
 
 export const KST_TIMEZONE = "Asia/Seoul";
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
-export const MAX_BOT_UPLOAD_SIZE = 8 * 1024 * 1024; // 8MB
 
 export function formatDiscordTitle(
   platform: Platform,
@@ -80,13 +79,6 @@ export function chunkArray<T>(arr: T[], chunkSize: number): T[][] {
   return chunks;
 }
 
-export class MediaTooLargeError extends Error {
-  constructor(public readonly fileIndex: number, public readonly size: number) {
-    super(`File ${fileIndex} is ${(size / 1024 / 1024).toFixed(1)}MB, exceeds Discord's 8MB limit`);
-    this.name = "MediaTooLargeError";
-  }
-}
-
 function buildAttachmentName(
   postData: PostData<AnySnsMetadata>,
   index: number,
@@ -115,15 +107,6 @@ function buildAttachmentName(
 
   // twitter
   return `twitter-${postData.username}-${postData.postID}-${i}.${ext}`;
-}
-
-function validateFileSizes(files: PostData<AnySnsMetadata>["files"]): void {
-  for (let i = 0; i < files.length; i++) {
-    const size = files[i].buffer.byteLength;
-    if (size > MAX_BOT_UPLOAD_SIZE) {
-      throw new MediaTooLargeError(i, size);
-    }
-  }
 }
 
 export interface SendPostOptions {
@@ -181,8 +164,6 @@ export async function sendPostToChannel(
   } = options;
   const files = postData.files;
 
-  validateFileSizes(files);
-
   const hasMedia = files.length > 0;
   const flags = (suppressEmbeds && hasMedia) ? MessageFlags.SuppressEmbeds : undefined;
 
@@ -217,10 +198,12 @@ export async function sendPostToChannel(
       await sendAndTrack(suppressLinksInTextExceptLast?.(content) ?? content);
     } else {
       const sentMessages: Message[] = [];
-      const textMsg = await sendAndTrack(content);
-      sentMessages.push(textMsg);
       try {
-        for (const chunk of chunks) {
+        // First message: text content + first chunk of attachments combined
+        const firstMsg = await sendAndTrack(content, { files: chunks[0] });
+        sentMessages.push(firstMsg);
+        // Additional messages for remaining attachment chunks
+        for (const chunk of chunks.slice(1)) {
           const sent = await channel.send({ files: chunk, flags });
           result.messageIds.push(sent.id);
           result.messages.push(sent);

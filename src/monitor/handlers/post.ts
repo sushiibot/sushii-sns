@@ -4,11 +4,12 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ComponentType,
+  DiscordAPIError,
 } from "discord.js";
 import { isConnectionMonitored } from "../../config/server_config";
 import logger from "../../logger";
 import type { AnySnsMetadata, SnsLink } from "../../platforms/base";
-import { MediaTooLargeError, sendPostToChannel } from "../../utils/discord";
+import { sendPostToChannel } from "../../utils/discord";
 import { parseUsernameFromUrl } from "../../utils/socialUrls";
 import { ConnectionTypeSchema, getConnectionId, type ConnectionType } from "../config";
 import type { MonitorRepository } from "../data/repository";
@@ -172,20 +173,11 @@ export class PostHandler {
 
       await interaction.editReply(editSuccess(`✅ Post sent to socials channel!${jumpLink}`));
     } catch (err) {
-      if (err instanceof MediaTooLargeError) {
-        await interaction.editReply(
-          editError(
-            `❌ Media file is too large to upload to Discord (${(err.size / 1024 / 1024).toFixed(1)} MB).\n` +
-              `View the post directly: ${postUrl}`,
-          ),
-        );
-        return;
-      }
-
       const { requestBody: _body, ...safeErr } = (err as any) ?? {};
       log.error(safeErr, "/post command failed");
+      const apiMsg = err instanceof DiscordAPIError ? `: ${err.message}` : "";
       try {
-        await interaction.editReply(editError("❌ Something went wrong. Please try again."));
+        await interaction.editReply(editError(`❌ Something went wrong${apiMsg}`));
       } catch {
         // editReply can fail if deferReply never completed
       }
