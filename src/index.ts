@@ -35,7 +35,6 @@ async function main(): Promise<void> {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
-      GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessages,
     ],
   });
