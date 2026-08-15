@@ -5,6 +5,7 @@ import type { ServerConfig } from "../config/server_config";
 import type { MonitorConfigProvider } from "./sns";
 import { extractLinksHandler } from "./links";
 import { snsHandler } from "./sns";
+import { stripBotMention } from "../utils/discord";
 
 const log = logger.child({ module: "MessageCreateHandler" });
 
@@ -23,7 +24,7 @@ export async function MessageCreateHandler(msg: Message, serverConfig: ServerCon
 
   log.debug({ msgID: msg.id }, "Received message in whitelisted channel");
 
-  if (msg.content === "ping") {
+  if (stripBotMention(msg)?.trim() === "ping") {
     msg.reply("pong").catch((err) => log.error(err, "Failed to reply pong"));
   }
 

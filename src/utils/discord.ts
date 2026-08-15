@@ -22,6 +22,28 @@ dayjs.extend(timezone);
 export const KST_TIMEZONE = "Asia/Seoul";
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
+/**
+ * Returns the message content with a leading mention of the bot stripped,
+ * or null if the message doesn't start with a mention of the bot.
+ *
+ * Required for text commands (e.g. `@bot dl <url>`) so the bot only reacts
+ * to messages explicitly directed at it, per Discord's message content
+ * intent compliance requirements.
+ */
+export function stripBotMention(msg: Message): string | null {
+  const botId = msg.client.user?.id;
+  if (!botId) {
+    return null;
+  }
+
+  const match = msg.content.match(new RegExp(`^<@!?${botId}>\\s*`));
+  if (!match) {
+    return null;
+  }
+
+  return msg.content.slice(match[0].length);
+}
+
 export function formatDiscordTitle(
   platform: Platform,
   username: string,

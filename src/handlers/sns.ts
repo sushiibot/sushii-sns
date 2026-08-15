@@ -16,7 +16,7 @@ import { TwitterDownloader } from "../platforms/twitter/downloader";
 import { tracer } from "../tracing";
 import { formatSnsErrorForUser } from "./snsErrors";
 import type { ServerConfig } from "../config/server_config";
-import { sendPostToChannel } from "../utils/discord";
+import { sendPostToChannel, stripBotMention } from "../utils/discord";
 
 export interface MonitorConfigProvider {
   getConfig(guildId: string): { format: "inline" | "links"; template: string } | null;
@@ -98,7 +98,8 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
     return;
   }
 
-  if (!msg.content.startsWith("dl")) {
+  const commandContent = stripBotMention(msg);
+  if (commandContent === null || !commandContent.startsWith("dl")) {
     return;
   }
 
@@ -107,7 +108,7 @@ export async function snsHandler(msg: Message<true>, serverConfig: ServerConfig 
     "Processing sns message",
   );
 
-  const posts = findAllSnsLinks(msg.content);
+  const posts = findAllSnsLinks(commandContent);
 
   if (posts.length === 0) {
     log.debug(

@@ -4,14 +4,16 @@ Two families: **message commands** (`dl`, `links`) in whitelisted channels, and 
 
 Environment basics: `CHANNEL_ID_WHITELIST`, `DISCORD_TOKEN`, `APPLICATION_ID`. Monitor also needs `MONITORS_CONFIG_PATH` and API keys — see [architecture.md](./architecture.md#environment-variables).
 
+Message commands require **mentioning the bot first** (`@bot dl ...`, `@bot links`) — a bare `dl`/`links` message is ignored. This keeps the bot compliant with Discord's message content intent requirements. Mention detection/stripping lives in [`stripBotMention`](../src/utils/discord.ts).
+
 ## 1. `dl` — download media
 
-Send a message whose content **starts with** `dl` (then a space or URL). The bot matches supported platform URLs and downloads media into the channel.
+Send a message that **mentions the bot** followed by `dl` (then a space or URL). The bot matches supported platform URLs and downloads media into the channel.
 
 ```text
-dl https://x.com/user/status/1234567890
-dl https://www.instagram.com/p/SHORTCODE/
-dl https://www.tiktok.com/@user/video/1234567890
+@bot dl https://x.com/user/status/1234567890
+@bot dl https://www.instagram.com/p/SHORTCODE/
+@bot dl https://www.tiktok.com/@user/video/1234567890
 ```
 
 - Only runs in channels listed in `CHANNEL_ID_WHITELIST`.
@@ -20,7 +22,7 @@ dl https://www.tiktok.com/@user/video/1234567890
 
 ## 2. `links` — attachment URLs
 
-Reply to **any message** with the exact text `links` (after trimming). The bot sends attachment URLs from the referenced message, chunked to Discord’s length limit. On failure, the error line uses the same ops user resolution as alerts ([`formatLinksFailureReply`](../src/utils/opsAlert.ts)).
+Reply to **any message** by mentioning the bot with the exact text `links` after it (i.e. `@bot links`, after trimming). The bot sends attachment URLs from the referenced message, chunked to Discord’s length limit. On failure, the error line uses the same ops user resolution as alerts ([`formatLinksFailureReply`](../src/utils/opsAlert.ts)).
 
 ## 3. Slash commands
 

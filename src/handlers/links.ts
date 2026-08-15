@@ -1,7 +1,7 @@
 import type { Message } from "discord.js";
 import { MessageFlags } from "discord.js";
 import logger from "../logger";
-import { itemsToMessageContents } from "../utils/discord";
+import { itemsToMessageContents, stripBotMention } from "../utils/discord";
 
 const log = logger.child({ module: "extractLinksHandler" });
 
@@ -14,7 +14,8 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
     return;
   }
 
-  if (msg.content.trim() !== "links") {
+  const commandContent = stripBotMention(msg);
+  if (commandContent === null || commandContent.trim() !== "links") {
     return;
   }
 
