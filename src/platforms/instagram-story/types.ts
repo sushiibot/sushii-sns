@@ -68,7 +68,9 @@ export const MediaCandidateSchema = z.object({
 export type MediaCandidate = z.infer<typeof MediaCandidateSchema>;
 
 export const StoryItemSchema = z.object({
-  pk: z.string(),
+  pk: z.union([z.string(), z.number()]),
+  // "{media_pk}_{owner_pk}" — string, so exact even past Number.MAX_SAFE_INTEGER.
+  id: z.string().optional(),
   taken_at: z.number(),
   user: UserSchema.optional(),
   image_versions2: z.object({
@@ -83,11 +85,21 @@ export const StoryItemSchema = z.object({
 });
 export type StoryItem = z.infer<typeof StoryItemSchema>;
 
-export const IgStoriesSchema = z.object({
-  result: z.array(StoryItemSchema),
-  status: z.string().optional(),
-});
-export type IgStories = z.infer<typeof IgStoriesSchema>;
+/**
+ * Exact media pk as a string. Prefers `id` ("{media_pk}_{owner_pk}") since
+ * `pk` alone may already be precision-lossy if it came through JSON.parse
+ * without parseJsonPreservingBigIntKeys.
+ */
+export function getStoryItemPk(item: StoryItem): string {
+  return item.id?.split("_")[0] ?? String(item.pk);
+}
+
+// instagram-best-experience GET /stories?user_id= returns a bare array,
+// but tolerate a {result: [...]} wrapper defensively too.
+export const BestExperienceStoriesSchema = z
+  .union([z.array(StoryItemSchema), z.object({ result: z.array(StoryItemSchema) })])
+  .transform((v) => (Array.isArray(v) ? v : v.result));
+export type BestExperienceStories = z.infer<typeof BestExperienceStoriesSchema>;
 
 export const DataSchema = z.object({
   additional_data: AdditionalDataSchema.optional(),

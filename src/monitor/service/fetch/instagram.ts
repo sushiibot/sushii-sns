@@ -5,6 +5,7 @@ import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import logger from "../../../logger";
 import type { AnySnsMetadata, InstagramMetadata, PostData } from "../../../platforms/base";
+import { resolveInstagramUserId } from "../../../utils/instagramBestExperience";
 import { tryWithFallbacks } from "../../../utils/fallback";
 import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
@@ -38,7 +39,7 @@ interface NormalizedFeedNode {
   carouselUrls?: string[];
 }
 
-function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
+function parseRapidApiPostsResponse(json: any): NormalizedFeedNode[] {
   let rawNodes: any[] | undefined;
 
   if (Array.isArray(json)) {
@@ -54,11 +55,11 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
   }
 
   if (!rawNodes) {
-    throw new Error("RapidAPI120 /posts returned unexpected response format");
+    throw new Error("instagram-best-experience /feed returned unexpected response format");
   }
 
   if (rawNodes.length > 0 && rawNodes[0].urls) {
-    log.warn("RapidAPI120 /posts returned pre-flattened items — carousel detection unavailable");
+    log.warn("instagram-best-experience /feed returned pre-flattened items — carousel detection unavailable");
     return rawNodes.flatMap((item: any) => {
       const shortcode = item.meta?.shortcode;
       if (!shortcode) return [];
@@ -146,31 +147,32 @@ function parseRapidApiPostsResponse120(json: any): NormalizedFeedNode[] {
 }
 
 /**
- * List-only: RapidAPI120 /posts → normalized feed nodes.
+ * List-only: instagram-best-experience /feed → normalized feed nodes.
  */
-async function listIgProfilePostsViaRapidApi120(
+async function listIgProfilePostsViaBestExperience(
   igUsername: string,
+  userId?: string,
 ): Promise<NormalizedFeedNode[]> {
   if (isDevMode()) {
     const mock = loadMockJson<any>("instagram-post-rapidapi.json");
-    return parseRapidApiPostsResponse120(mock);
+    return parseRapidApiPostsResponse(mock);
   }
 
+  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, config.RAPID_API_KEY);
+
   const req = new Request(
-    "https://instagram120.p.rapidapi.com/api/instagram/posts",
+    `https://instagram-best-experience.p.rapidapi.com/feed?user_id=${resolvedUserId}`,
     {
-      method: "POST",
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
-        "x-rapidapi-host": "instagram120.p.rapidapi.com",
+        "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
         "x-rapidapi-key": config.RAPID_API_KEY,
       },
-      body: JSON.stringify({ username: igUsername, maxId: "" }),
     },
   );
 
   const res = await fetch(req);
-  recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_POSTS);
+  recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_FEED);
   if (!res.ok) {
     const errorBody = await extractErrorBody(res);
     log.error(
@@ -180,15 +182,16 @@ async function listIgProfilePostsViaRapidApi120(
         errorBody,
         url: req.url,
       },
-      "RapidAPI120 /posts failed",
+      "instagram-best-experience /feed failed",
     );
     throw new Error(
-      `RapidAPI120 /posts failed: ${res.status} ${res.statusText} - ${typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)}`,
+      `instagram-best-experience /feed failed: ${res.status} ${res.statusText} - ${typeof errorBody === "string" ? errorBody : JSON.stringify(errorBody)}`,
     );
   }
 
   const rawJson = await res.json();
-  return parseRapidApiPostsResponse120(rawJson);
+  const items = Array.isArray(rawJson?.items) ? rawJson.items : rawJson;
+  return parseRapidApiPostsResponse(items);
 }
 
 /**
@@ -298,12 +301,13 @@ async function fetchIgProfilePosts(
     limit?: number;
     markSeenOnly?: boolean;
   },
+  userId?: string,
 ): Promise<PostData<InstagramMetadata>[]> {
   return tryWithFallbacks([
     {
-      name: "RapidAPI120 /posts",
+      name: "instagram-best-experience /feed",
       fn: async () => {
-        const nodes = await listIgProfilePostsViaRapidApi120(igUsername);
+        const nodes = await listIgProfilePostsViaBestExperience(igUsername, userId);
         return orchestrateIgProfileNodes(nodes, igUsername, downloadFilesFromUrls, options);
       },
     },
@@ -319,7 +323,7 @@ export async function seedIgProfileFeed(
   isPostSeen: (id: string) => boolean,
   markPostSeen: (id: string) => void,
 ): Promise<{ count: number; profileName: string | null }> {
-  const nodes = await listIgProfilePostsViaRapidApi120(handle);
+  const nodes = await listIgProfilePostsViaBestExperience(handle);
   const unseen = nodes.filter((n) => !isPostSeen(n.shortcode));
   for (const n of unseen) {
     markPostSeen(n.shortcode);
@@ -343,9 +347,19 @@ export async function fetchInstagramConnectionPosts(
     ? { ...options, markSeenOnly: options.profileMarkSeenOnly }
     : undefined;
 
+  // Resolve once and share between profile + stories fetches to avoid
+  // doubling /profile RapidAPI usage on every poll tick. Falls through to
+  // undefined on failure — each fetch still resolves its own userId then.
+  const userId = await resolveInstagramUserId(igUsername, config.RAPID_API_KEY).catch(
+    (err) => {
+      log.warn({ err, igUsername }, "Failed to pre-resolve Instagram user ID; falling back to per-call resolution");
+      return undefined;
+    },
+  );
+
   const [profileResult, storiesResult] = await Promise.allSettled([
-    fetchIgProfilePosts(igUsername, downloadFilesFromUrls, profileOptions),
-    fetchInstagramStories(igUsername, downloadFilesFromUrls, options),
+    fetchIgProfilePosts(igUsername, downloadFilesFromUrls, profileOptions, userId),
+    fetchInstagramStories(igUsername, downloadFilesFromUrls, options, userId),
   ]);
 
   const profilePosts = profileResult.status === "fulfilled" ? profileResult.value : [];

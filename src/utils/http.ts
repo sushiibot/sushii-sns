@@ -57,6 +57,16 @@ export function tracedFetch(req: Request): Promise<Response> {
   );
 }
 
+/**
+ * Instagram's private API returns 64-bit `pk` media/user IDs as bare JSON
+ * numbers, which JSON.parse silently rounds past Number.MAX_SAFE_INTEGER.
+ * Quote them as strings before parsing so exact digits survive.
+ */
+export function parseJsonPreservingBigIntKeys(text: string, keys: string[]): unknown {
+  const pattern = new RegExp(`"(${keys.join("|")})":(\\d{16,})`, "g");
+  return JSON.parse(text.replace(pattern, '"$1":"$2"'));
+}
+
 export function getFileExtFromURL(url: string): string {
   const urlObj = new URL(url);
   const match = urlObj.pathname.match(/\.([^.]+)$/);

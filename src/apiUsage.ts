@@ -11,10 +11,11 @@ export type ApiProviderId =
 /** Stable keys for each counted HTTP call — use with recordApiUsage() */
 export const ApiUsageEndpoint = {
   FXTWITTER_STATUS: "fxtwitter_status",
-  RAPIDAPI_IG120_MEDIA_BY_SHORTCODE: "rapidapi_ig120_media_by_shortcode",
-  RAPIDAPI_IG120_STORY_SINGLE: "rapidapi_ig120_story_single",
-  RAPIDAPI_IG120_POSTS: "rapidapi_ig120_posts",
-  RAPIDAPI_IG120_STORIES_FEED: "rapidapi_ig120_stories_feed",
+  RAPIDAPI_IG_BEST_EXPERIENCE_POST: "rapidapi_ig_best_experience_post",
+  RAPIDAPI_IG_BEST_EXPERIENCE_PROFILE: "rapidapi_ig_best_experience_profile",
+  RAPIDAPI_IG_BEST_EXPERIENCE_STORIES: "rapidapi_ig_best_experience_stories",
+  RAPIDAPI_IG_BEST_EXPERIENCE_FEED: "rapidapi_ig_best_experience_feed",
+  RAPIDAPI_IG_LOOTER_POST: "rapidapi_ig_looter_post",
   RAPIDAPI_TIKTOK_BEST_VIDEO: "rapidapi_tiktok_best_video",
   RAPIDAPI_TIKTOK_BEST_USER_FEED: "rapidapi_tiktok_best_user_feed",
   RAPIDAPI_TIKTOK_API6_USER_VIDEOS: "rapidapi_tiktok_api6_user_videos",
@@ -40,24 +41,29 @@ const ENDPOINT_META: Record<ApiUsageEndpointKey, EndpointMeta> = {
     label: "fxtwitter — GET status",
     quotaHint: "—",
   },
-  [ApiUsageEndpoint.RAPIDAPI_IG120_MEDIA_BY_SHORTCODE]: {
+  [ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_POST]: {
     provider: "rapidapi",
-    label: "instagram120 — POST mediaByShortcode",
+    label: "instagram-best-experience — GET post",
     quotaHint: "—",
   },
-  [ApiUsageEndpoint.RAPIDAPI_IG120_STORY_SINGLE]: {
+  [ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_PROFILE]: {
     provider: "rapidapi",
-    label: "instagram120 — POST story (single)",
+    label: "instagram-best-experience — GET profile",
     quotaHint: "—",
   },
-  [ApiUsageEndpoint.RAPIDAPI_IG120_POSTS]: {
+  [ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_STORIES]: {
     provider: "rapidapi",
-    label: "instagram120 — POST posts",
+    label: "instagram-best-experience — GET stories",
     quotaHint: "—",
   },
-  [ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED]: {
+  [ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_FEED]: {
     provider: "rapidapi",
-    label: "instagram120 — POST stories (feed)",
+    label: "instagram-best-experience — GET feed",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_POST]: {
+    provider: "rapidapi",
+    label: "instagram-looter2 — GET post",
     quotaHint: "—",
   },
   [ApiUsageEndpoint.RAPIDAPI_TIKTOK_BEST_VIDEO]: {

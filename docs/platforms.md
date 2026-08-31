@@ -22,13 +22,13 @@ Downloaders are registered in [`sns.ts`](../src/handlers/sns.ts) (`findAllSnsLin
 
 - **Path:** [`src/platforms/instagram-post/downloader.ts`](../src/platforms/instagram-post/downloader.ts)
 - **URLs:** `/p/`, `/reel/`, `/reels/`, `/tv/`, and `user/reel/shortcode` style paths.
-- **API:** Bright Data datasets (async snapshot: trigger → poll → fetch).
+- **API:** RapidAPI (`instagram-best-experience.p.rapidapi.com` → `instagram-looter2.p.rapidapi.com` fallback), then Bright Data datasets (async snapshot: trigger → poll → fetch) as last resort.
 
 ## Instagram stories
 
 - **Path:** [`src/platforms/instagram-story/downloader.ts`](../src/platforms/instagram-story/downloader.ts)
 - **URLs:** `https://www.instagram.com/stories/{username}/{storyId}/` (not bare profile URLs).
-- **API:** RapidAPI (`instagram120.p.rapidapi.com`).
+- **API:** RapidAPI (`instagram-best-experience.p.rapidapi.com`) — resolves username to numeric user ID via `/profile`, then fetches active stories via `/stories`.
 
 ## TikTok
 

@@ -5,6 +5,8 @@ import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
 import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import logger from "../../../logger";
+import { parseJsonPreservingBigIntKeys } from "../../../utils/http";
+import { resolveInstagramUserId } from "../../../utils/instagramBestExperience";
 import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
 
@@ -14,7 +16,11 @@ const log = logger.child({ module: "monitor/fetch/instagram-story" });
  * Flatten RapidAPI stories JSON into raw story items.
  */
 function flattenInstagramStoryItems(json: any): any[] {
-  const resultItems: any[] = Array.isArray(json?.result) ? json.result : [];
+  const resultItems: any[] = Array.isArray(json)
+    ? json
+    : Array.isArray(json?.result)
+      ? json.result
+      : [];
   const nestedItems: any[] = resultItems.flatMap((entry: any) => {
     if (Array.isArray(entry?.items)) return entry.items;
     if (Array.isArray(entry?.stories)) return entry.stories;
@@ -24,32 +30,32 @@ function flattenInstagramStoryItems(json: any): any[] {
   return nestedItems.length > 0 ? nestedItems : resultItems;
 }
 
-async function listInstagramStoryItems(igUsername: string): Promise<any[]> {
+async function listInstagramStoryItems(igUsername: string, userId?: string): Promise<any[]> {
   if (isDevMode()) {
     const mock = loadMockJson<any>("instagram-stories.json");
     return flattenInstagramStoryItems(mock);
   }
 
+  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, config.RAPID_API_KEY);
+
   const req = new Request(
-    "https://instagram120.p.rapidapi.com/api/instagram/stories",
+    `https://instagram-best-experience.p.rapidapi.com/stories?user_id=${resolvedUserId}`,
     {
-      method: "POST",
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
-        "x-rapidapi-host": "instagram120.p.rapidapi.com",
+        "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
         "x-rapidapi-key": config.RAPID_API_KEY,
       },
-      body: JSON.stringify({ username: igUsername }),
     },
   );
 
   const res = await fetch(req);
-  recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED);
+  recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_STORIES);
   if (!res.ok) {
     throw new Error(`Failed to fetch instagram stories (${res.status})`);
   }
 
-  const json: any = await res.json();
+  const json = parseJsonPreservingBigIntKeys(await res.text(), ["pk", "id"]);
   return flattenInstagramStoryItems(json);
 }
 
@@ -117,8 +123,9 @@ async function fetchInstagramStoriesViaRapidApi(
     storiesMarkSeenOnly?: boolean;
     storiesLimit?: number;
   },
+  userId?: string,
 ): Promise<PostData<AnySnsMetadata>[]> {
-  const items = await listInstagramStoryItems(igUsername);
+  const items = await listInstagramStoryItems(igUsername, userId);
   const { isPostSeen: isSeen, markPostSeen: markSeen, storiesMarkSeenOnly, storiesLimit } = options ?? {};
   const limit = storiesLimit ?? Infinity;
 
@@ -166,6 +173,7 @@ export async function fetchInstagramStories(
     storiesMarkSeenOnly?: boolean;
     storiesLimit?: number;
   },
+  userId?: string,
 ): Promise<PostData<AnySnsMetadata>[]> {
-  return fetchInstagramStoriesViaRapidApi(igUsername, downloadFilesFromUrls, options);
+  return fetchInstagramStoriesViaRapidApi(igUsername, downloadFilesFromUrls, options, userId);
 }

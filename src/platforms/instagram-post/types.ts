@@ -84,32 +84,35 @@ export const InstagramPostListSchema = z.array(InstagramPostElementSchema);
 export type InstagramPostList = z.infer<typeof InstagramPostListSchema>;
 
 // ---------------------------------------------------------------------------
-// RapidAPI instagram120 types (mediaByShortcode / posts)
+// RapidAPI instagram-best-experience types (GET /post?shortcode=)
+// Private-API response shape: media_type 8 = carousel, 2 = video, 1 = photo.
 // ---------------------------------------------------------------------------
 
-export const RapidApiMediaUrlSchema = z.object({
+export const BestExperienceMediaCandidateSchema = z.object({
   url: z.string(),
-  name: z.string().optional(),
-  extension: z.string().optional(),
 });
 
-export const RapidApiMetaSchema = z.object({
-  title: z.string().optional(),
-  sourceUrl: z.string().optional(),
-  shortcode: z.string().optional(),
-  username: z.string().optional(),
-  commentCount: z.number().optional(),
-  likeCount: z.number().optional(),
-  takenAt: z.number().optional(),
+export const BestExperienceCarouselItemSchema = z.object({
+  media_type: z.number().optional(),
+  image_versions2: z
+    .object({ candidates: z.array(BestExperienceMediaCandidateSchema).optional() })
+    .optional(),
+  video_versions: z.array(BestExperienceMediaCandidateSchema).optional(),
 });
 
-export const RapidApiMediaItemSchema = z.object({
-  urls: z.array(RapidApiMediaUrlSchema),
-  meta: RapidApiMetaSchema,
-  pictureUrl: z.string().optional(),
+export const BestExperiencePostSchema = z.object({
+  pk: z.union([z.string(), z.number()]).optional(),
+  code: z.string().optional(),
+  media_type: z.number().optional(),
+  taken_at: z.number().optional(),
+  image_versions2: z
+    .object({ candidates: z.array(BestExperienceMediaCandidateSchema).optional() })
+    .optional(),
+  video_versions: z.array(BestExperienceMediaCandidateSchema).optional(),
+  carousel_media: z.array(BestExperienceCarouselItemSchema).optional(),
+  caption: z.object({ text: z.string().optional() }).optional().nullable(),
+  user: z.object({ username: z.string().optional() }).optional(),
 });
 
-export const RapidApiMediaResponseSchema = z.array(RapidApiMediaItemSchema);
-export type RapidApiMediaItem = z.infer<typeof RapidApiMediaItemSchema>;
-export type RapidApiMediaResponse = z.infer<typeof RapidApiMediaResponseSchema>;
+export type BestExperiencePost = z.infer<typeof BestExperiencePostSchema>;
 

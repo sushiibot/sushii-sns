@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import logger from "../../logger";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, KST_TIMEZONE, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
-import { getFileExtFromURL, tracedFetch } from "../../utils/http";
+import { getFileExtFromURL, parseJsonPreservingBigIntKeys, tracedFetch } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
 import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import { tryWithFallbacks } from "../../utils/fallback";
@@ -21,7 +21,12 @@ import {
   type ProgressFn,
   type SnsLink,
 } from "../base";
-import { IgStoriesSchema, type IgStories } from "./types";
+import { resolveInstagramUserId } from "../../utils/instagramBestExperience";
+import {
+  BestExperienceStoriesSchema,
+  getStoryItemPk,
+  type StoryItem,
+} from "./types";
 
 const log = logger.child({ module: "InstagramStoryDownloader" });
 
@@ -71,89 +76,85 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
   buildApiRequest(details: SnsLink<InstagramMetadata>): Request {
     return new Request(
-      `https://instagram120.p.rapidapi.com/api/instagram/story`,
+      `https://instagram-best-experience.p.rapidapi.com/profile?username=${details.metadata.username}`,
       {
-        method: "POST",
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
-          "x-rapidapi-host": "instagram120.p.rapidapi.com",
+          "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
           "x-rapidapi-key": process.env.RAPID_API_KEY!,
         },
-        body: JSON.stringify({
-          username: details.metadata.username,
-          storyId: details.metadata.shortcode,
-        }),
       },
     );
+  }
+
+  private async resolveUserId(username: string): Promise<string> {
+    try {
+      return await resolveInstagramUserId(username, process.env.RAPID_API_KEY!);
+    } catch (err) {
+      log.error({ err, username }, "Failed to resolve Instagram username to user ID");
+      throw new StoryUnavailableError("Could not find that Instagram profile.");
+    }
+  }
+
+  private async fetchStoriesForUserId(userId: string): Promise<StoryItem[]> {
+    const req = new Request(
+      `https://instagram-best-experience.p.rapidapi.com/stories?user_id=${userId}`,
+      {
+        method: "GET",
+        headers: {
+          "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+        },
+      },
+    );
+
+    const response = await tracedFetch(req);
+    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_STORIES);
+
+    if (!response.ok) {
+      const body = await response.text();
+      log.error(
+        { responseCode: response.status, responseBody: body },
+        "Failed to fetch ig best-experience stories response",
+      );
+      throw new Error(`Failed to fetch Instagram stories (${response.status})`);
+    }
+
+    const rawJson = parseJsonPreservingBigIntKeys(await response.text(), ["pk", "id"]);
+    return BestExperienceStoriesSchema.parse(rawJson);
   }
 
   private async fetchContentViaRapidApi(
     snsLink: SnsLink<InstagramMetadata>,
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
-    const req = this.buildApiRequest(snsLink);
-    const response = await tracedFetch(req);
-    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORY_SINGLE);
+    const username = snsLink.metadata.username!;
+    const storyId = snsLink.metadata.shortcode!;
 
-    if (response.status !== 200) {
-      const body = await response.text();
-      log.error(
-        {
-          request: req.headers,
-          responseCode: response.status,
-          responseBody: body,
-        },
-        "Failed to fetch ig API story response",
-      );
-
+    const userId = await this.resolveUserId(username);
+    let allItems: StoryItem[];
+    try {
+      allItems = await this.fetchStoriesForUserId(userId);
+    } catch (err) {
       throw new StoryUnavailableError(
         "This Instagram story is no longer available. Stories expire after about 24 hours, or the link may be invalid.",
       );
     }
+    const items = allItems.filter((item) => getStoryItemPk(item) === storyId);
 
-    let igStoriesRes: IgStories;
-    let rawJson;
-    try {
-      const responseText = await response.text();
-
-      rawJson = JSON.parse(responseText);
-      igStoriesRes = IgStoriesSchema.parse(rawJson);
-    } catch (err) {
-      log.error(
-        {
-          err,
-          responseCode: response.status,
-          rawBody: rawJson,
-        },
-        "Failed to parse ig API response",
-      );
-      throw new StoryUnavailableError(
-        "Could not read this Instagram story. It may have expired or been removed.",
-      );
-    }
-
-    log.debug(
-      {
-        igStoriesRes,
-      },
-      "Fetched IG stories response",
-    );
-
-    if (!igStoriesRes.result || igStoriesRes.result.length === 0) {
+    if (items.length === 0) {
       throw new StoryUnavailableError(
         "No story found at that link. Instagram stories expire after about 24 hours.",
       );
     }
 
-    progressCallback?.(
-      `Downloading ${igStoriesRes.result.length} story`,
-    );
+    progressCallback?.(`Downloading ${items.length} story`);
 
     // Categorize by date in KST!! Could be multiple stories on different days
     // YYMMDD -> [media URLs]
     const storiesByDate = new Map<string, { date?: Date; urls: string[] }>();
 
-    for (const item of igStoriesRes.result) {
+    for (const item of items) {
       const takenAtMs = item.taken_at * 1000;
       const d = dayjs(takenAtMs).tz(KST_TIMEZONE);
       const dateKey = d.format("YYMMDD");
@@ -184,7 +185,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
       storiesByDate.set(dateKey, storiesDay);
     }
 
-    const storyUsername = igStoriesRes.result[0]?.user?.username || "Unknown user";
+    const storyUsername = items[0]?.user?.username || username;
     const postDatas: PostData<InstagramMetadata>[] = [];
     for (const [dateKey, { date, urls }] of storiesByDate.entries()) {
       const buffers = await this.downloadImages(urls);
@@ -222,44 +223,15 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   ): Promise<PostData<InstagramMetadata>[]> {
     const username = snsLink.metadata.username!;
 
-    const req = new Request(
-      "https://instagram120.p.rapidapi.com/api/instagram/stories",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-rapidapi-host": "instagram120.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
-        },
-        body: JSON.stringify({ username }),
-      },
-    );
-
-    const response = await tracedFetch(req);
-    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_STORIES_FEED);
-
-    if (!response.ok) {
-      const body = await response.text();
-      log.error(
-        { responseCode: response.status, responseBody: body },
-        "Failed to fetch ig stories feed",
-      );
+    const userId = await this.resolveUserId(username);
+    let items: StoryItem[];
+    try {
+      items = await this.fetchStoriesForUserId(userId);
+    } catch (err) {
       throw new StoryUnavailableError(
         "Could not fetch stories for that profile. The account may be private or have no active stories.",
       );
     }
-
-    const json: any = await response.json();
-
-    // Flatten nested result structure (same logic as monitor fetch)
-    const resultItems: any[] = Array.isArray(json?.result) ? json.result : [];
-    const nestedItems: any[] = resultItems.flatMap((entry: any) => {
-      if (Array.isArray(entry?.items)) return entry.items;
-      if (Array.isArray(entry?.stories)) return entry.stories;
-      if (Array.isArray(entry?.result)) return entry.result;
-      return [];
-    });
-    const items: any[] = nestedItems.length > 0 ? nestedItems : resultItems;
 
     if (items.length === 0) {
       throw new StoryUnavailableError(
@@ -283,18 +255,14 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
 
       let mediaUrl: string | undefined;
 
-      const videoVersions: any[] = Array.isArray(item?.video_versions) ? item.video_versions : [];
-      if (videoVersions[0]?.url) {
-        mediaUrl = videoVersions[0].url;
-      } else if (item?.video_url) {
+      if (item.video_versions?.[0]?.url) {
+        mediaUrl = item.video_versions[0].url;
+      } else if (item.video_url) {
         mediaUrl = item.video_url;
-      } else {
-        const candidates: any[] = Array.isArray(item?.image_versions2?.candidates)
-          ? item.image_versions2.candidates
-          : Array.isArray(item?.candidates)
-            ? item.candidates
-            : [];
-        mediaUrl = candidates[0]?.url ?? item?.thumbnail_url;
+      } else if (item.image_versions2?.candidates?.[0]?.url) {
+        mediaUrl = item.image_versions2.candidates[0].url;
+      } else if (item.thumbnail_url) {
+        mediaUrl = item.thumbnail_url;
       }
 
       if (mediaUrl) {

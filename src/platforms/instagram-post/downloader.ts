@@ -23,12 +23,11 @@ import {
 import {
   BdMonitorResponseSchema,
   BdTriggerResponseSchema,
+  BestExperiencePostSchema,
   type BdMonitorResponse,
   type BdTriggerResponse,
   InstagramPostListSchema,
-  RapidApiMediaResponseSchema,
   type InstagramPostElement,
-  type RapidApiMediaResponse,
 } from "./types";
 
 const log = logger.child({ module: "InstagramPostDownloader" });
@@ -217,10 +216,10 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   }
 
   // ---------------------------------------------------------------------------
-  // RapidAPI provider: mediaByShortcode
+  // RapidAPI provider: instagram-best-experience GET /post?shortcode=
   // ---------------------------------------------------------------------------
 
-  private async fetchContentViaRapidApi(
+  private async fetchContentViaBestExperience(
     snsLink: SnsLink<InstagramMetadata>,
     progressCallback?: ProgressFn,
   ): Promise<PostData<InstagramMetadata>[]> {
@@ -230,40 +229,38 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     }
 
     const req = new Request(
-      "https://instagram120.p.rapidapi.com/api/instagram/mediaByShortcode",
+      `https://instagram-best-experience.p.rapidapi.com/post?shortcode=${shortcode}`,
       {
-        method: "POST",
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
-          "x-rapidapi-host": "instagram120.p.rapidapi.com",
+          "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
           "x-rapidapi-key": process.env.RAPID_API_KEY!,
         },
-        body: JSON.stringify({ shortcode }),
       },
     );
 
     progressCallback?.("Fetching post...");
 
     const response = await tracedFetch(req);
-    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG120_MEDIA_BY_SHORTCODE);
+    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_POST);
     if (!response.ok) {
       throw new Error("Failed to fetch Instagram post.");
     }
 
     const rawJson = await response.json();
-    const items = RapidApiMediaResponseSchema.parse(rawJson);
+    const post = BestExperiencePostSchema.parse(rawJson);
 
-    if (items.length === 0) {
-      throw new Error("No media found for this Instagram post");
-    }
+    const extractMediaUrl = (item: {
+      video_versions?: { url: string }[];
+      image_versions2?: { candidates?: { url: string }[] };
+    }): string | undefined =>
+      item.video_versions?.[0]?.url ?? item.image_versions2?.candidates?.[0]?.url;
 
-    // All items in the array share the same meta (carousel images)
-    const meta = items[0].meta;
-
-    // Collect all media URLs from every item (carousel support)
-    const mediaUrls = items
-      .flatMap((item) => item.urls.map((u) => u.url))
-      .filter((u) => u.length > 0);
+    const mediaUrls = post.carousel_media?.length
+      ? post.carousel_media
+          .map(extractMediaUrl)
+          .filter((u): u is string => !!u)
+      : [extractMediaUrl(post)].filter((u): u is string => !!u);
 
     if (mediaUrls.length === 0) {
       throw new Error("No media found for this Instagram post");
@@ -283,13 +280,91 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         postLink: {
           ...snsLink,
-          url: meta.sourceUrl ?? snsLink.url,
+          url: post.code
+            ? `https://www.instagram.com/p/${post.code}/`
+            : snsLink.url,
         },
-        username: meta.username || "Unknown user",
-        postID: meta.shortcode || shortcode,
-        originalText: meta.title || "",
-        timestamp: meta.takenAt
-          ? new Date(meta.takenAt * 1000)
+        username: post.user?.username || "Unknown user",
+        postID: post.code || shortcode,
+        originalText: post.caption?.text || "",
+        timestamp: post.taken_at ? new Date(post.taken_at * 1000) : undefined,
+        files,
+      },
+    ];
+  }
+
+  // ---------------------------------------------------------------------------
+  // RapidAPI provider: instagram-looter2 GET /post?link=
+  // ---------------------------------------------------------------------------
+
+  private async fetchContentViaLooter(
+    snsLink: SnsLink<InstagramMetadata>,
+    progressCallback?: ProgressFn,
+  ): Promise<PostData<InstagramMetadata>[]> {
+    const req = new Request(
+      `https://instagram-looter2.p.rapidapi.com/post?link=${encodeURIComponent(snsLink.url)}`,
+      {
+        method: "GET",
+        headers: {
+          "x-rapidapi-host": "instagram-looter2.p.rapidapi.com",
+          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+        },
+      },
+    );
+
+    progressCallback?.("Fetching post...");
+
+    const response = await tracedFetch(req);
+    recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_POST);
+    if (!response.ok) {
+      throw new Error("Failed to fetch Instagram post.");
+    }
+
+    // Looter returns Instagram's raw GraphQL post shape — duck-typed, no zod schema.
+    const post: any = await response.json();
+    if (post?.status === false) {
+      throw new Error("Failed to fetch Instagram post.");
+    }
+
+    const shortcode: string | undefined = post.shortcode ?? snsLink.metadata.shortcode;
+
+    const extractMediaUrl = (node: any): string | undefined =>
+      node?.video_url ?? node?.display_url;
+
+    const children = post.edge_sidecar_to_children?.edges;
+    const mediaUrls: string[] = Array.isArray(children) && children.length > 0
+      ? children
+          .map((edge: any) => extractMediaUrl(edge?.node))
+          .filter((u: unknown): u is string => typeof u === "string" && u.length > 0)
+      : [extractMediaUrl(post)].filter((u): u is string => !!u);
+
+    if (mediaUrls.length === 0) {
+      throw new Error("No media found for this Instagram post");
+    }
+
+    progressCallback?.("Downloading images...");
+    const buffers = await this.downloadImages(mediaUrls);
+    let files = buffers.map((buf, i): File => ({
+      ext: getFileExtFromURL(mediaUrls[i]),
+      buffer: buf,
+    }));
+    files = await convertHeicToJpeg(files);
+
+    progressCallback?.("Downloaded!", true);
+
+    const caption = post.edge_media_to_caption?.edges?.[0]?.node?.text ?? "";
+
+    return [
+      {
+        postLink: {
+          ...snsLink,
+          url: shortcode ? `https://www.instagram.com/p/${shortcode}/` : snsLink.url,
+        },
+        username: post.owner?.username || "Unknown user",
+        postID: shortcode || "Unknown ID",
+        originalText: caption,
+        timestamp: post.taken_at_timestamp
+          ? new Date(post.taken_at_timestamp * 1000)
           : undefined,
         files,
       },
@@ -400,15 +475,17 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
   ): Promise<PostData<InstagramMetadata>[]> {
     return tryWithFallbacks([
       {
-        name: "RapidAPI mediaByShortcode",
-        fn: () => this.fetchContentViaRapidApi(snsLink, progressCallback),
+        name: "RapidAPI instagram-best-experience",
+        fn: () => this.fetchContentViaBestExperience(snsLink, progressCallback),
       },
-      // {
-      //   name: "Brightdata",
-      //   fn: () => this.fetchContentViaBrightdata(snsLink, progressCallback),
-      // },
-      // TODO: Add additional fallback provider here
-      // { name: "Placeholder", fn: () => ... },
+      {
+        name: "RapidAPI instagram-looter2",
+        fn: () => this.fetchContentViaLooter(snsLink, progressCallback),
+      },
+      {
+        name: "Brightdata",
+        fn: () => this.fetchContentViaBrightdata(snsLink, progressCallback),
+      },
     ]);
   }
 
