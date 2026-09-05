@@ -3,7 +3,6 @@ import config from "../config/config";
 import logger from "../logger";
 import type { ServerConfig } from "../config/server_config";
 import type { MonitorConfigProvider } from "./sns";
-import { extractLinksHandler } from "./links";
 import { snsHandler } from "./sns";
 import { stripBotMention } from "../utils/discord";
 
@@ -28,5 +27,5 @@ export async function MessageCreateHandler(msg: Message, serverConfig: ServerCon
     msg.reply("pong").catch((err) => log.error(err, "Failed to reply pong"));
   }
 
-  await Promise.allSettled([extractLinksHandler(msg), snsHandler(msg, serverConfig, monitorConfig)]);
+  await snsHandler(msg, serverConfig, monitorConfig);
 }

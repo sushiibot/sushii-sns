@@ -1,74 +1,65 @@
-import type { Message } from "discord.js";
+import type { Message, MessageContextMenuCommandInteraction } from "discord.js";
 import { MessageFlags } from "discord.js";
+import config from "../config/config";
 import logger from "../logger";
-import { itemsToMessageContents, stripBotMention } from "../utils/discord";
+import { itemsToMessageContents } from "../utils/discord";
 
-const log = logger.child({ module: "extractLinksHandler" });
+const log = logger.child({ module: "handleExtractLinksContextMenu" });
 
-export async function extractLinksHandler(msg: Message<true>): Promise<void> {
-  if (!msg.channel.isSendable()) {
+/**
+ * Builds the reply contents for the "extract links" feature given the
+ * target message. Content-based extraction only works here because
+ * interaction payloads (context menu targets) always carry full message
+ * content, unlike gateway/REST message content which is gated by the
+ * privileged Message Content intent the bot no longer has.
+ */
+function buildLinksReplyContents(targetMsg: Message): string[] {
+  if (targetMsg.attachments.size === 0) {
+    if (targetMsg.content.includes("https://")) {
+      return [targetMsg.content];
+    }
+
+    return ["No attachments found in that message noob"];
+  }
+
+  return itemsToMessageContents(
+    "",
+    targetMsg.attachments.map((a) => a.url),
+  );
+}
+
+export async function handleExtractLinksContextMenu(
+  interaction: MessageContextMenuCommandInteraction,
+): Promise<void> {
+  if (!interaction.channelId || !config.CHANNEL_ID_WHITELIST.includes(interaction.channelId)) {
+    await interaction.reply({
+      content: "This command isn't available in this channel.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
-  if (!msg.reference) {
-    return;
-  }
+  const targetMsg = interaction.targetMessage;
 
-  const commandContent = stripBotMention(msg);
-  if (commandContent === null || commandContent.trim() !== "links") {
-    return;
-  }
-
-  const refMsg = await msg.fetchReference();
   log.debug(
     {
-      requester: msg.author.username,
-      refMsgID: refMsg.id,
-      refMsgAttachments: refMsg.attachments.size,
+      requester: interaction.user.username,
+      targetMsgID: targetMsg.id,
+      targetMsgAttachments: targetMsg.attachments.size,
     },
     "Extracting links from message",
   );
 
-  if (refMsg.attachments.size === 0) {
-    // Check if the message includes image is a links
-    if (refMsg.content.includes("https://")) {
-      await msg.reply({
-        content: refMsg.content,
-        flags: MessageFlags.SuppressEmbeds,
-      });
-
-      return;
-    }
-
-    await msg.reply("No attachments found in replied to message noob");
-    return;
-  }
-
-  // Group attachments into list of strings max 2000 characters
-  const msgs = itemsToMessageContents(
-    "",
-    refMsg.attachments.map((a) => a.url),
-  );
-
-  log.debug(
-    {
-      requester: msg.author.username,
-      refMsgID: refMsg.id,
-      attachments: refMsg.attachments.size,
-      numMsgs: msgs.length,
-    },
-    "Found attachment links, sending",
-  );
+  const msgs = buildLinksReplyContents(targetMsg);
 
   try {
-    if (msgs.length > 1) {
-      await msg.reply(
-        "Links in __multiple messages__ below, make sure to copy all of them",
-      );
-    }
+    await interaction.reply({
+      content: msgs[0],
+      flags: MessageFlags.SuppressEmbeds,
+    });
 
-    for (const msgContent of msgs) {
-      await msg.reply({
+    for (const msgContent of msgs.slice(1)) {
+      await interaction.followUp({
         content: msgContent,
         flags: MessageFlags.SuppressEmbeds,
       });
@@ -76,6 +67,10 @@ export async function extractLinksHandler(msg: Message<true>): Promise<void> {
   } catch (err) {
     log.error(err, "Failed to send links");
 
-    await msg.reply("oops couldnt get links");
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp("oops couldnt get links");
+    } else {
+      await interaction.reply("oops couldnt get links");
+    }
   }
 }

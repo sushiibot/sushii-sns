@@ -1,4 +1,6 @@
 import {
+  ApplicationCommandType,
+  ContextMenuCommandBuilder,
   InteractionContextType,
   PermissionFlagsBits,
   REST,
@@ -49,6 +51,12 @@ export async function registerSlashCommands(
     .setContexts(InteractionContextType.Guild)
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
+  const extractLinksCommand = new ContextMenuCommandBuilder()
+    .setName("Attachment Links")
+    .setType(ApplicationCommandType.Message)
+    .setContexts(InteractionContextType.Guild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
+
   const rest = new REST().setToken(token);
 
   try {
@@ -57,6 +65,7 @@ export async function registerSlashCommands(
         monitorCommand.toJSON(),
         postCommand.toJSON(),
         fetchAllCommand.toJSON(),
+        extractLinksCommand.toJSON(),
       ],
     });
     log.info("Slash commands registered");

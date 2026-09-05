@@ -1,10 +1,10 @@
 # Bot commands
 
-Two families: **message commands** (`dl`, `links`) in whitelisted channels, and **slash commands** (registered globally at startup).
+Three families: the **message command** (`dl`) in whitelisted channels, the **`Attachment Links` message context menu command**, and **slash commands** (all registered globally at startup).
 
 Environment basics: `CHANNEL_ID_WHITELIST`, `DISCORD_TOKEN`, `APPLICATION_ID`. Monitor also needs `MONITORS_CONFIG_PATH` and API keys — see [architecture.md](./architecture.md#environment-variables).
 
-Message commands require **mentioning the bot first** (`@bot dl ...`, `@bot links`) — a bare `dl`/`links` message is ignored. This keeps the bot compliant with Discord's message content intent requirements. Mention detection/stripping lives in [`stripBotMention`](../src/utils/discord.ts).
+The `dl` message command requires **mentioning the bot first** (`@bot dl ...`) — a bare `dl` message is ignored. This keeps the bot compliant with Discord's message content intent requirements. Mention detection/stripping lives in [`stripBotMention`](../src/utils/discord.ts).
 
 ## 1. `dl` — download media
 
@@ -20,9 +20,11 @@ Send a message that **mentions the bot** followed by `dl` (then a space or URL).
 - Reactions + optional progress messaging while fetching.
 - User-facing errors may use [`snsErrors.ts`](../src/handlers/snsErrors.ts); repeated provider failures can trigger [`opsAlert`](../src/utils/opsAlert.ts).
 
-## 2. `links` — attachment URLs
+## 2. `Attachment Links` — message context menu command
 
-Reply to **any message** by mentioning the bot with the exact text `links` after it (i.e. `@bot links`, after trimming). The bot sends attachment URLs from the referenced message, chunked to Discord’s length limit. On failure, the error line uses the same ops user resolution as alerts ([`formatLinksFailureReply`](../src/utils/opsAlert.ts)).
+Right-click (or long-press on mobile) any message → **Apps → Attachment Links**. Replies with that message's attachment URLs (chunked to Discord's length limit), or its text content if it has no attachments but contains a link. Only works in channels listed in `CHANNEL_ID_WHITELIST`, and requires **Manage Messages** by default (overridable per-guild in Integrations → Commands).
+
+Implemented as a context menu command rather than a reply-based text command because interaction payloads always carry full target-message content, unaffected by the privileged Message Content intent the bot doesn't have — a gateway/REST-sourced message's content would come back empty here otherwise. See [`handleExtractLinksContextMenu`](../src/handlers/links.ts).
 
 ## 3. Slash commands
 

@@ -4,6 +4,7 @@ import config from "./config/config";
 import { loadServerConfig } from "./config/server_config";
 import { MessageCreateHandler } from "./handlers/MessageCreate";
 import { handleUsageSlash } from "./handlers/usageSlash";
+import { handleExtractLinksContextMenu } from "./handlers/links";
 import { isDevMode } from "./monitor/runtime";
 import { createMonitor, registerSlashCommands } from "./monitor";
 import logger from "./logger";
@@ -79,6 +80,22 @@ async function main(): Promise<void> {
 
           default:
             log.warn({ commandName: interaction.commandName }, "Unrecognized slash command");
+            await interaction.reply({
+              content: "Unknown command.",
+              flags: MessageFlags.Ephemeral,
+            });
+        }
+        return;
+      }
+
+      if (interaction.isMessageContextMenuCommand()) {
+        switch (interaction.commandName) {
+          case "Attachment Links":
+            await handleExtractLinksContextMenu(interaction);
+            break;
+
+          default:
+            log.warn({ commandName: interaction.commandName }, "Unrecognized context menu command");
             await interaction.reply({
               content: "Unknown command.",
               flags: MessageFlags.Ephemeral,
