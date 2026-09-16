@@ -65,7 +65,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     );
   }
 
-  async waitUntilDataReady(snapshotID: string, timeoutMs = 30_000): Promise<void> {
+  async waitUntilDataReady(snapshotID: string, timeoutMs = 60_000): Promise<void> {
     const req = new Request(
       `https://api.brightdata.com/datasets/v3/progress/${snapshotID}`,
       {
@@ -244,7 +244,14 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_BEST_EXPERIENCE_POST);
     if (!response.ok) {
-      throw new Error("Failed to fetch Instagram post.");
+      const body = await response.text().catch(() => "");
+      log.warn(
+        { provider: "instagram-best-experience", status: response.status, body },
+        "instagram-best-experience /post failed",
+      );
+      throw new Error(
+        `instagram-best-experience /post failed (${response.status})`,
+      );
     }
 
     const rawJson = await response.json();
@@ -317,13 +324,24 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     const response = await tracedFetch(req);
     recordApiUsage(ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_POST);
     if (!response.ok) {
-      throw new Error("Failed to fetch Instagram post.");
+      const body = await response.text().catch(() => "");
+      log.warn(
+        { provider: "instagram-looter2", status: response.status, body },
+        "instagram-looter2 /post failed",
+      );
+      throw new Error(`instagram-looter2 /post failed (${response.status})`);
     }
 
     // Looter returns Instagram's raw GraphQL post shape — duck-typed, no zod schema.
     const post: any = await response.json();
     if (post?.status === false) {
-      throw new Error("Failed to fetch Instagram post.");
+      log.warn(
+        { provider: "instagram-looter2", body: post },
+        "instagram-looter2 /post returned status=false",
+      );
+      throw new Error(
+        `instagram-looter2 /post failed: ${post?.errorMessage ?? "unknown error"}`,
+      );
     }
 
     const shortcode: string | undefined = post.shortcode ?? snsLink.metadata.shortcode;
