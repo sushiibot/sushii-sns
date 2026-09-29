@@ -6,7 +6,9 @@ import config from "../../../config/config";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import logger from "../../../logger";
 import { parseJsonPreservingBigIntKeys } from "../../../utils/http";
+import { tryWithFallbacks } from "../../../utils/fallback";
 import { resolveInstagramUserId } from "../../../utils/instagramBestExperience";
+import { fetchStoriesViaScraperApi2 } from "../../../utils/instagramScraperApi2";
 import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
 
@@ -36,6 +38,22 @@ async function listInstagramStoryItems(igUsername: string, userId?: string): Pro
     return flattenInstagramStoryItems(mock);
   }
 
+  return tryWithFallbacks([
+    {
+      name: "instagram-best-experience /stories",
+      fn: () => listInstagramStoryItemsViaBestExperience(igUsername, userId),
+    },
+    {
+      name: "instagram-scraper-api2 /stories",
+      fn: () => fetchStoriesViaScraperApi2(igUsername, config.RAPID_API_KEY),
+    },
+  ]);
+}
+
+async function listInstagramStoryItemsViaBestExperience(
+  igUsername: string,
+  userId?: string,
+): Promise<any[]> {
   const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, config.RAPID_API_KEY);
 
   const req = new Request(

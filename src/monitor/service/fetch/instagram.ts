@@ -6,6 +6,7 @@ import config from "../../../config/config";
 import logger from "../../../logger";
 import type { AnySnsMetadata, InstagramMetadata, PostData } from "../../../platforms/base";
 import { resolveInstagramUserId } from "../../../utils/instagramBestExperience";
+import { fetchUserPostsViaScraperApi2 } from "../../../utils/instagramScraperApi2";
 import { tryWithFallbacks } from "../../../utils/fallback";
 import { isDevMode, loadMockJson } from "../../runtime";
 import type { DownloadFilesFromUrls } from "../fetch";
@@ -194,6 +195,17 @@ async function listIgProfilePostsViaBestExperience(
   return parseRapidApiPostsResponse(items);
 }
 
+async function listIgProfilePostsViaScraperApi2(igUsername: string): Promise<NormalizedFeedNode[]> {
+  if (isDevMode()) {
+    const mock = loadMockJson<any>("instagram-post-rapidapi.json");
+    return parseRapidApiPostsResponse(mock);
+  }
+
+  return parseRapidApiPostsResponse(
+    await fetchUserPostsViaScraperApi2(igUsername, config.RAPID_API_KEY),
+  );
+}
+
 /**
  * Download media for one feed node and build PostData (no seen state).
  */
@@ -311,6 +323,13 @@ async function fetchIgProfilePosts(
         return orchestrateIgProfileNodes(nodes, igUsername, downloadFilesFromUrls, options);
       },
     },
+    {
+      name: "instagram-scraper-api2 /posts",
+      fn: async () => {
+        const nodes = await listIgProfilePostsViaScraperApi2(igUsername);
+        return orchestrateIgProfileNodes(nodes, igUsername, downloadFilesFromUrls, options);
+      },
+    },
   ]);
 }
 
@@ -323,7 +342,16 @@ export async function seedIgProfileFeed(
   isPostSeen: (id: string) => boolean,
   markPostSeen: (id: string) => void,
 ): Promise<{ count: number; profileName: string | null }> {
-  const nodes = await listIgProfilePostsViaBestExperience(handle);
+  const nodes = await tryWithFallbacks([
+    {
+      name: "instagram-best-experience /feed",
+      fn: () => listIgProfilePostsViaBestExperience(handle),
+    },
+    {
+      name: "instagram-scraper-api2 /posts",
+      fn: () => listIgProfilePostsViaScraperApi2(handle),
+    },
+  ]);
   const unseen = nodes.filter((n) => !isPostSeen(n.shortcode));
   for (const n of unseen) {
     markPostSeen(n.shortcode);

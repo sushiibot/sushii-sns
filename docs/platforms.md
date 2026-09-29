@@ -22,13 +22,15 @@ Downloaders are registered in [`sns.ts`](../src/handlers/sns.ts) (`findAllSnsLin
 
 - **Path:** [`src/platforms/instagram-post/downloader.ts`](../src/platforms/instagram-post/downloader.ts)
 - **URLs:** `/p/`, `/reel/`, `/reels/`, `/tv/`, and `user/reel/shortcode` style paths.
-- **API:** RapidAPI (`instagram-best-experience.p.rapidapi.com` → `instagram-looter2.p.rapidapi.com` fallback), then Bright Data datasets (async snapshot: trigger → poll → fetch) as last resort.
+- **API:** RapidAPI `instagram-best-experience` → `instagram-scraper-api2` (`/v1/post_info`) → `instagram-looter2`, then Bright Data datasets (async snapshot: trigger → poll → fetch) as last resort.
+- `instagram-scraper-api2` responses are mapped onto the best-experience shape in [`instagramScraperApi2.ts`](../src/utils/instagramScraperApi2.ts). looter2's `display_url` is a center-cropped square, so the largest `display_resources` entry is used instead.
 
 ## Instagram stories
 
 - **Path:** [`src/platforms/instagram-story/downloader.ts`](../src/platforms/instagram-story/downloader.ts)
-- **URLs:** `https://www.instagram.com/stories/{username}/{storyId}/` (not bare profile URLs).
-- **API:** RapidAPI (`instagram-best-experience.p.rapidapi.com`) — resolves username to numeric user ID via `/profile`, then fetches active stories via `/stories`.
+- **URLs:** `https://www.instagram.com/stories/{username}/{storyId}/` (one story) and `https://www.instagram.com/{username}/` (all active stories).
+- **API:** RapidAPI `instagram-best-experience` (`/profile` → user ID, then `/stories`), falling back to `instagram-scraper-api2` (`/v1/stories` by username). Bright Data has no stories dataset.
+- Story IDs are normalized to `{media_pk}_{owner_pk}` for both providers, so monitor seen-state doesn't change when a fallback serves the request. The monitor feed also falls back to `instagram-scraper-api2` `/v1/posts`.
 
 ## TikTok
 

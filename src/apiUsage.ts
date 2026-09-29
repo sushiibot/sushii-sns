@@ -16,6 +16,9 @@ export const ApiUsageEndpoint = {
   RAPIDAPI_IG_BEST_EXPERIENCE_STORIES: "rapidapi_ig_best_experience_stories",
   RAPIDAPI_IG_BEST_EXPERIENCE_FEED: "rapidapi_ig_best_experience_feed",
   RAPIDAPI_IG_LOOTER_POST: "rapidapi_ig_looter_post",
+  RAPIDAPI_IG_SCRAPER_API2_POST: "rapidapi_ig_scraper_api2_post",
+  RAPIDAPI_IG_SCRAPER_API2_STORIES: "rapidapi_ig_scraper_api2_stories",
+  RAPIDAPI_IG_SCRAPER_API2_POSTS: "rapidapi_ig_scraper_api2_posts",
   RAPIDAPI_TIKTOK_BEST_VIDEO: "rapidapi_tiktok_best_video",
   RAPIDAPI_TIKTOK_BEST_USER_FEED: "rapidapi_tiktok_best_user_feed",
   RAPIDAPI_TIKTOK_API6_USER_VIDEOS: "rapidapi_tiktok_api6_user_videos",
@@ -64,6 +67,21 @@ const ENDPOINT_META: Record<ApiUsageEndpointKey, EndpointMeta> = {
   [ApiUsageEndpoint.RAPIDAPI_IG_LOOTER_POST]: {
     provider: "rapidapi",
     label: "instagram-looter2 — GET post",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.RAPIDAPI_IG_SCRAPER_API2_POST]: {
+    provider: "rapidapi",
+    label: "instagram-scraper-api2 — GET post_info",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.RAPIDAPI_IG_SCRAPER_API2_STORIES]: {
+    provider: "rapidapi",
+    label: "instagram-scraper-api2 — GET stories",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.RAPIDAPI_IG_SCRAPER_API2_POSTS]: {
+    provider: "rapidapi",
+    label: "instagram-scraper-api2 — GET posts",
     quotaHint: "—",
   },
   [ApiUsageEndpoint.RAPIDAPI_TIKTOK_BEST_VIDEO]: {

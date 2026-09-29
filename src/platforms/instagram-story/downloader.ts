@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import * as z from "zod";
 import {
   AttachmentBuilder,
   MessageFlags,
@@ -22,9 +23,11 @@ import {
   type SnsLink,
 } from "../base";
 import { resolveInstagramUserId } from "../../utils/instagramBestExperience";
+import { fetchStoriesViaScraperApi2 } from "../../utils/instagramScraperApi2";
 import {
   BestExperienceStoriesSchema,
   getStoryItemPk,
+  StoryItemSchema,
   type StoryItem,
 } from "./types";
 
@@ -87,13 +90,20 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     );
   }
 
-  private async resolveUserId(username: string): Promise<string> {
-    try {
-      return await resolveInstagramUserId(username, process.env.RAPID_API_KEY!);
-    } catch (err) {
-      log.error({ err, username }, "Failed to resolve Instagram username to user ID");
-      throw new StoryUnavailableError("Could not find that Instagram profile.");
-    }
+  private async listStoryItems(username: string): Promise<StoryItem[]> {
+    const apiKey = process.env.RAPID_API_KEY!;
+    return tryWithFallbacks([
+      {
+        name: "RapidAPI instagram-best-experience /stories",
+        fn: async () =>
+          this.fetchStoriesForUserId(await resolveInstagramUserId(username, apiKey)),
+      },
+      {
+        name: "RapidAPI instagram-scraper-api2 /stories",
+        fn: async () =>
+          z.array(StoryItemSchema).parse(await fetchStoriesViaScraperApi2(username, apiKey)),
+      },
+    ]);
   }
 
   private async fetchStoriesForUserId(userId: string): Promise<StoryItem[]> {
@@ -131,11 +141,11 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
     const username = snsLink.metadata.username!;
     const storyId = snsLink.metadata.shortcode!;
 
-    const userId = await this.resolveUserId(username);
     let allItems: StoryItem[];
     try {
-      allItems = await this.fetchStoriesForUserId(userId);
+      allItems = await this.listStoryItems(username);
     } catch (err) {
+      log.error({ err, username }, "All story providers failed");
       throw new StoryUnavailableError(
         "This Instagram story is no longer available. Stories expire after about 24 hours, or the link may be invalid.",
       );
@@ -223,11 +233,11 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   ): Promise<PostData<InstagramMetadata>[]> {
     const username = snsLink.metadata.username!;
 
-    const userId = await this.resolveUserId(username);
     let items: StoryItem[];
     try {
-      items = await this.fetchStoriesForUserId(userId);
+      items = await this.listStoryItems(username);
     } catch (err) {
+      log.error({ err, username }, "All story providers failed");
       throw new StoryUnavailableError(
         "Could not fetch stories for that profile. The account may be private or have no active stories.",
       );
@@ -309,22 +319,10 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
   ): Promise<PostData<InstagramMetadata>[]> {
     if (!snsLink.metadata.shortcode) {
       // Profile URL — fetch all current stories for this user
-      return tryWithFallbacks([
-        {
-          name: "RapidAPI stories feed",
-          fn: () => this.fetchContentViaStoriesFeedApi(snsLink, progressCallback),
-        },
-      ]);
+      return this.fetchContentViaStoriesFeedApi(snsLink, progressCallback);
     }
 
-    return tryWithFallbacks([
-      {
-        name: "RapidAPI stories",
-        fn: () => this.fetchContentViaRapidApi(snsLink, progressCallback),
-      },
-      // TODO: Add additional fallback provider here
-      // { name: "Placeholder", fn: () => ... },
-    ]);
+    return this.fetchContentViaRapidApi(snsLink, progressCallback);
   }
 
   // Needs to be separate so we can get the Discord attachment URLs

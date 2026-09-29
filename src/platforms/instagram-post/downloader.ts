@@ -10,6 +10,7 @@ import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS
 import { tryWithFallbacks } from "../../utils/fallback";
 import { getFileExtFromURL, tracedFetch } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
+import { fetchPostViaScraperApi2 } from "../../utils/instagramScraperApi2";
 import { buildLinksFormatMessages } from "../../utils/template";
 import {
   SnsDownloader,
@@ -254,7 +255,38 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       );
     }
 
-    const rawJson = await response.json();
+    return this.buildPostDataFromBestExperienceShape(
+      await response.json(),
+      snsLink,
+      shortcode,
+      progressCallback,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // RapidAPI provider: instagram-scraper-api2 GET /v1/post_info?code_or_id_or_url=
+  // ---------------------------------------------------------------------------
+
+  private async fetchContentViaScraperApi2(
+    snsLink: SnsLink<InstagramMetadata>,
+    progressCallback?: ProgressFn,
+  ): Promise<PostData<InstagramMetadata>[]> {
+    const shortcode = snsLink.metadata.shortcode;
+    if (!shortcode) {
+      throw new Error("No shortcode available for RapidAPI fetch");
+    }
+
+    progressCallback?.("Fetching post...");
+    const post = await fetchPostViaScraperApi2(shortcode, process.env.RAPID_API_KEY!);
+    return this.buildPostDataFromBestExperienceShape(post, snsLink, shortcode, progressCallback);
+  }
+
+  private async buildPostDataFromBestExperienceShape(
+    rawJson: unknown,
+    snsLink: SnsLink<InstagramMetadata>,
+    shortcode: string,
+    progressCallback?: ProgressFn,
+  ): Promise<PostData<InstagramMetadata>[]> {
     const post = BestExperiencePostSchema.parse(rawJson);
 
     const extractMediaUrl = (item: {
@@ -509,6 +541,10 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       {
         name: "RapidAPI instagram-best-experience",
         fn: () => this.fetchContentViaBestExperience(snsLink, progressCallback),
+      },
+      {
+        name: "RapidAPI instagram-scraper-api2",
+        fn: () => this.fetchContentViaScraperApi2(snsLink, progressCallback),
       },
       {
         name: "RapidAPI instagram-looter2",
