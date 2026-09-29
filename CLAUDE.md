@@ -26,6 +26,10 @@ Discord bot that downloads social media (Twitter/X, Instagram posts/reels/storie
 
 **Config**: Zod-validated env in `src/config/config.ts`. Optional per-guild message templates via `SERVER_CONFIG_PATH` → `src/config/server_config.ts`.
 
+## Deployment
+
+Pushing to `main` auto-deploys to production (`.github/workflows/ci.yml`: test → docker-build → deploy to `apps` via sushii-ansible). There is no staging and no manual gate — a push is a prod release. Only `docs/**`, `README.md`, and `CLAUDE.md` are in `paths-ignore`; any other file triggers a full redeploy. Don't run `./deploy.sh` by hand after pushing; watch the run with `gh run watch` instead.
+
 ## Database Migrations
 
 Migrations live in `drizzle/migrations/`. Always generate them with drizzle-kit — never hand-write them:
