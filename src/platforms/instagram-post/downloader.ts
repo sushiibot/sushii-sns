@@ -346,8 +346,22 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
 
     const shortcode: string | undefined = post.shortcode ?? snsLink.metadata.shortcode;
 
+    // display_url is a center-cropped square for non-1:1 posts; display_resources keeps the original aspect ratio.
+    const largestDisplayResource = (node: any): string | undefined => {
+      const resources: any[] = Array.isArray(node?.display_resources) ? node.display_resources : [];
+      const best = resources.reduce<any>(
+        (acc, r) =>
+          (r?.config_width ?? 0) * (r?.config_height ?? 0) >
+          (acc?.config_width ?? 0) * (acc?.config_height ?? 0)
+            ? r
+            : acc,
+        undefined,
+      );
+      return typeof best?.src === "string" ? best.src : undefined;
+    };
+
     const extractMediaUrl = (node: any): string | undefined =>
-      node?.video_url ?? node?.display_url;
+      node?.video_url ?? largestDisplayResource(node) ?? node?.display_url;
 
     const children = post.edge_sidecar_to_children?.edges;
     const mediaUrls: string[] = Array.isArray(children) && children.length > 0
