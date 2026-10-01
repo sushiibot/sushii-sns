@@ -11,6 +11,8 @@ const schema = z.object({
 
   BD_API_TOKEN: z.string(),
   RAPID_API_KEY: z.string(),
+  // Xiaohongshu + Weibo downloads. Optional so the bot still boots without it.
+  TIKHUB_API_KEY: z.string().optional(),
 
   CHANNEL_ID_WHITELIST: z
     .string()

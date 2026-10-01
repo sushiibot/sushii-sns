@@ -4,7 +4,13 @@ import { tracedFetch } from "../utils/http";
 
 const log = logger.child({ module: "SnsDownloader" });
 
-export type Platform = "twitter" | "instagram" | "instagram-story" | "tiktok";
+export type Platform =
+  | "twitter"
+  | "instagram"
+  | "instagram-story"
+  | "tiktok"
+  | "xiaohongshu"
+  | "weibo";
 
 export function platformToString(platform: Platform): string {
   switch (platform) {
@@ -16,6 +22,10 @@ export function platformToString(platform: Platform): string {
       return "Instagram Story";
     case "tiktok":
       return "TikTok";
+    case "xiaohongshu":
+      return "Xiaohongshu";
+    case "weibo":
+      return "Weibo";
   }
 }
 
@@ -42,10 +52,24 @@ export interface TikTokMetadata extends SnsMetadata {
   videoId: string;
 }
 
+export interface XiaohongshuMetadata extends SnsMetadata {
+  platform: "xiaohongshu";
+  // Absent for xhslink.com short links, which TikHub resolves via share_text
+  noteId?: string;
+}
+
+export interface WeiboMetadata extends SnsMetadata {
+  platform: "weibo";
+  // Numeric mid; base62 bids from weibo.com/{uid}/{bid} links are converted
+  mid: string;
+}
+
 export type AnySnsMetadata =
   | TwitterMetadata
   | InstagramMetadata
-  | TikTokMetadata;
+  | TikTokMetadata
+  | XiaohongshuMetadata
+  | WeiboMetadata;
 
 // Define type guard functions for each metadata type
 export function isTwitterMetadata(

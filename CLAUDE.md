@@ -16,7 +16,7 @@ bun test src/platforms/twitter/downloader.test.ts  # single file
 
 ## Architecture
 
-Discord bot that downloads social media (Twitter/X, Instagram posts/reels/stories, TikTok) when users post `dl <url>` in whitelisted channels.
+Discord bot that downloads social media (Twitter/X, Instagram posts/reels/stories, TikTok, Xiaohongshu, Weibo) when users post `dl <url>` in whitelisted channels.
 
 **Message flow**: `src/index.ts` → `MessageCreate` (whitelist filter) → parallel `snsHandler` + `extractLinksHandler`. `snsHandler` requires message starting with `dl`, then `findAllSnsLinks` + async generator `snsService` streams downloads per platform.
 

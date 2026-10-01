@@ -20,6 +20,7 @@ async function main(): Promise<void> {
       DISCORD_TOKEN: "********",
       BD_API_TOKEN: "********",
       RAPID_API_KEY: "********",
+      TIKHUB_API_KEY: config.TIKHUB_API_KEY ? "********" : undefined,
       MONITOR_DEV_MODE: monitorDevMode,
     },
     "Starting bot with config",

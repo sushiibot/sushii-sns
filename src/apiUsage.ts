@@ -6,7 +6,8 @@
 export type ApiProviderId =
   | "fxtwitter"
   | "rapidapi"
-  | "brightdata";
+  | "brightdata"
+  | "tikhub";
 
 /** Stable keys for each counted HTTP call — use with recordApiUsage() */
 export const ApiUsageEndpoint = {
@@ -26,6 +27,10 @@ export const ApiUsageEndpoint = {
   BRIGHTDATA_TRIGGER: "brightdata_trigger",
   BRIGHTDATA_PROGRESS: "brightdata_progress",
   BRIGHTDATA_SNAPSHOT: "brightdata_snapshot",
+  TIKHUB_XHS_APP_NOTE_INFO: "tikhub_xhs_app_note_info",
+  TIKHUB_XHS_WEB_NOTE_INFO_V7: "tikhub_xhs_web_note_info_v7",
+  TIKHUB_WEIBO_WEB_V2_POST_DETAIL: "tikhub_weibo_web_v2_post_detail",
+  TIKHUB_WEIBO_APP_STATUS_DETAIL: "tikhub_weibo_app_status_detail",
 } as const;
 
 export type ApiUsageEndpointKey =
@@ -119,6 +124,26 @@ const ENDPOINT_META: Record<ApiUsageEndpointKey, EndpointMeta> = {
     label: "Bright Data — GET snapshot",
     quotaHint: "—",
   },
+  [ApiUsageEndpoint.TIKHUB_XHS_APP_NOTE_INFO]: {
+    provider: "tikhub",
+    label: "TikHub — xiaohongshu app get_note_info",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.TIKHUB_XHS_WEB_NOTE_INFO_V7]: {
+    provider: "tikhub",
+    label: "TikHub — xiaohongshu web get_note_info_v7",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.TIKHUB_WEIBO_WEB_V2_POST_DETAIL]: {
+    provider: "tikhub",
+    label: "TikHub — weibo web_v2 fetch_post_detail",
+    quotaHint: "—",
+  },
+  [ApiUsageEndpoint.TIKHUB_WEIBO_APP_STATUS_DETAIL]: {
+    provider: "tikhub",
+    label: "TikHub — weibo app fetch_status_detail",
+    quotaHint: "—",
+  },
 };
 
 /** Per-provider total quota hint for `/usage providers` — edit to match your plans */
@@ -126,6 +151,7 @@ export const PROVIDER_QUOTA_HINT: Record<ApiProviderId, string> = {
   fxtwitter: "—",
   rapidapi: "—",
   brightdata: "—",
+  tikhub: "—",
 };
 
 const counts = new Map<ApiUsageEndpointKey, number>();
@@ -143,6 +169,7 @@ export function getProviderTotals(): Record<ApiProviderId, number> {
     fxtwitter: 0,
     rapidapi: 0,
     brightdata: 0,
+    tikhub: 0,
   };
   for (const [key, n] of counts) {
     totals[ENDPOINT_META[key].provider] += n;
@@ -163,6 +190,7 @@ export function formatUsageProvidersMessage(): string {
     `- **fxtwitter**: ${formatLine(totals.fxtwitter, PROVIDER_QUOTA_HINT.fxtwitter)}`,
     `- **rapidapi**: ${formatLine(totals.rapidapi, PROVIDER_QUOTA_HINT.rapidapi)}`,
     `- **brightdata**: ${formatLine(totals.brightdata, PROVIDER_QUOTA_HINT.brightdata)}`,
+    `- **tikhub**: ${formatLine(totals.tikhub, PROVIDER_QUOTA_HINT.tikhub)}`,
   ];
   return lines.join("\n");
 }

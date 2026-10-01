@@ -14,6 +14,8 @@ Send a message that **mentions the bot** followed by `dl` (then a space or URL).
 @bot dl https://x.com/user/status/1234567890
 @bot dl https://www.instagram.com/p/SHORTCODE/
 @bot dl https://www.tiktok.com/@user/video/1234567890
+@bot dl https://www.xiaohongshu.com/explore/665f95200000000006005624
+@bot dl https://weibo.com/2991905905/z0JH2lOMb
 ```
 
 - Only runs in channels listed in `CHANNEL_ID_WHITELIST`.

@@ -4,7 +4,7 @@ Platform code lives under [`src/platforms/`](../src/platforms/). Each downloader
 
 ## Shared contract
 
-1. **`PLATFORM`** — e.g. `twitter`, `instagram`, `instagram-story`, `tiktok`.
+1. **`PLATFORM`** — e.g. `twitter`, `instagram`, `instagram-story`, `tiktok`, `xiaohongshu`, `weibo`.
 2. **`URL_REGEX`** — finds URLs in message text.
 3. **`createLinkFromMatch`** — builds `SnsLink` metadata.
 4. **`buildApiRequest` / `fetchContent`** — call external APIs and download media.
@@ -37,6 +37,21 @@ Downloaders are registered in [`sns.ts`](../src/handlers/sns.ts) (`findAllSnsLin
 - **Path:** [`src/platforms/tiktok/downloader.ts`](../src/platforms/tiktok/downloader.ts)
 - **URLs:** `tiktok.com/@user/video/{id}`.
 - **API:** RapidAPI (`tiktok-best-experience.p.rapidapi.com`).
+
+## Xiaohongshu (RED / 小红书)
+
+- **Path:** [`src/platforms/xiaohongshu/downloader.ts`](../src/platforms/xiaohongshu/downloader.ts)
+- **URLs:** `xiaohongshu.com/explore/{noteId}`, `/discovery/item/{noteId}`, `/user/profile/{userId}/{noteId}`, and `xhslink.com/...` app share links (no note ID; passed to TikHub as `share_text`).
+- **API:** TikHub (`TIKHUB_API_KEY`) `xiaohongshu/app/get_note_info` → `xiaohongshu/web/get_note_info_v7`.
+- TikHub proxies both app- and web-shaped note objects, so [`parse.ts`](../src/platforms/xiaohongshu/parse.ts) searches the response for the note and handles `images_list`/`image_list`, `video_info_v2`/`video.media.stream` (h264 preferred), and live photos (image + motion clip).
+
+## Weibo
+
+- **Path:** [`src/platforms/weibo/downloader.ts`](../src/platforms/weibo/downloader.ts)
+- **URLs:** `weibo.com/{uid}/{bid|mid}`, `weibo.com/detail/{mid}`, `m.weibo.cn/detail/{mid}`, `m.weibo.cn/status/{bid|mid}`. Base62 bids are converted to numeric mids locally.
+- **API:** TikHub (`TIKHUB_API_KEY`) `weibo/web_v2/fetch_post_detail` (long text enabled) → `weibo/app/fetch_status_detail`.
+- [`parse.ts`](../src/platforms/weibo/parse.ts) handles `mix_media_info`, `pic_ids`/`pic_infos` (incl. live photos), mobile `pics`, and `page_info` videos (highest-res `playback_list` entry). Reposts use the original post's media and quote its text. Text-only posts are allowed.
+- Media is downloaded with `Referer: https://weibo.com/` since sinaimg/weibocdn reject hotlinks.
 
 ## Adding a platform
 

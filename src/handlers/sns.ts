@@ -13,6 +13,8 @@ import { InstagramPostDownloader } from "../platforms/instagram-post/downloader"
 import { InstagramStoryDownloader } from "../platforms/instagram-story/downloader";
 import { TikTokDownloader } from "../platforms/tiktok/downloader";
 import { TwitterDownloader } from "../platforms/twitter/downloader";
+import { WeiboDownloader } from "../platforms/weibo/downloader";
+import { XiaohongshuDownloader } from "../platforms/xiaohongshu/downloader";
 import { tracer } from "../tracing";
 import { formatSnsErrorForUser } from "./snsErrors";
 import type { ServerConfig } from "../config/server_config";
@@ -29,6 +31,8 @@ const downloaders = [
   new InstagramPostDownloader(),
   new InstagramStoryDownloader(),
   new TikTokDownloader(),
+  new XiaohongshuDownloader(),
+  new WeiboDownloader(),
 ];
 
 export function findAllSnsLinks(content: string): SnsLink<AnySnsMetadata>[] {

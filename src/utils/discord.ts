@@ -127,6 +127,15 @@ function buildAttachmentName(
     return `tiktok-${postData.username}-${postData.postID}-${i}.${ext}`;
   }
 
+  // Nicknames are usually CJK, so these use the post ID only
+  if (platform === "xiaohongshu") {
+    return `xhs-${postData.postID}-${i}.${ext}`;
+  }
+
+  if (platform === "weibo") {
+    return `weibo-${postData.postID}-${i}.${ext}`;
+  }
+
   // twitter
   return `twitter-${postData.username}-${postData.postID}-${i}.${ext}`;
 }

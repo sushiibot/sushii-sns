@@ -66,5 +66,6 @@ See [monitor-feature.md](./monitor-feature.md) for config shape.
 | `SERVER_CONFIG_PATH` | — | Guild routing / feature flags |
 | `MONITORS_CONFIG_PATH` | — | Enables monitor + slash commands beyond `/usage` |
 | `DB_PATH` | `./data.db` | Metadata DB; connection DBs live alongside |
+| `TIKHUB_API_KEY` | — | Xiaohongshu + Weibo downloads ([TikHub](https://tikhub.io)); those links error without it |
 | `MONITOR_DEV_MODE` | — | See `src/handlers/monitor/runtime.ts` |
 | `ALERT_DISCORD_USER_ID` | — | User pinged on ops alerts |
