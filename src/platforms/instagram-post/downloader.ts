@@ -6,6 +6,7 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import logger from "../../logger";
+import { requireSecret } from "../../secrets";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { tryWithFallbacks } from "../../utils/fallback";
 import { getFileExtFromURL, tracedFetch } from "../../utils/http";
@@ -59,7 +60,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.BD_API_TOKEN!}`,
+          Authorization: `Bearer ${requireSecret("BD_API_TOKEN")}`,
         },
         body: JSON.stringify([{ url: details.url }]),
       },
@@ -71,7 +72,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
       `https://api.brightdata.com/datasets/v3/progress/${snapshotID}`,
       {
         headers: {
-          Authorization: `Bearer ${process.env.BD_API_TOKEN!}`,
+          Authorization: `Bearer ${requireSecret("BD_API_TOKEN")}`,
         },
       },
     );
@@ -151,7 +152,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         `https://api.brightdata.com/datasets/v3/snapshot/${snapshotID}?format=json`,
         {
           headers: {
-            Authorization: `Bearer ${process.env.BD_API_TOKEN!}`,
+            Authorization: `Bearer ${requireSecret("BD_API_TOKEN")}`,
           },
         },
       );
@@ -235,7 +236,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         method: "GET",
         headers: {
           "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+          "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
         },
       },
     );
@@ -277,7 +278,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
     }
 
     progressCallback?.("Fetching post...");
-    const post = await fetchPostViaScraperApi2(shortcode, process.env.RAPID_API_KEY!);
+    const post = await fetchPostViaScraperApi2(shortcode, requireSecret("RAPID_API_KEY"));
     return this.buildPostDataFromBestExperienceShape(post, snsLink, shortcode, progressCallback);
   }
 
@@ -346,7 +347,7 @@ export class InstagramPostDownloader extends SnsDownloader<InstagramMetadata> {
         method: "GET",
         headers: {
           "x-rapidapi-host": "instagram-looter2.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+          "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
         },
       },
     );

@@ -8,6 +8,7 @@ import { handleExtractLinksContextMenu } from "./handlers/links";
 import { isDevMode } from "./monitor/runtime";
 import { createMonitor, registerSlashCommands } from "./monitor";
 import logger from "./logger";
+import { requireSecret } from "./secrets";
 import { clientHealthy, startHealthCheckServer } from "./server/botHttp";
 
 const log = logger.child({ module: "bot" });
@@ -17,9 +18,6 @@ async function main(): Promise<void> {
   log.info(
     {
       ...config,
-      DISCORD_TOKEN: "********",
-      BD_API_TOKEN: "********",
-      RAPID_API_KEY: "********",
       MONITOR_DEV_MODE: monitorDevMode,
     },
     "Starting bot with config",
@@ -50,7 +48,7 @@ async function main(): Promise<void> {
 
   // Always register commands — all slash commands (monitor, post, fetch-all)
   // are defined globally regardless of whether the monitor feature is enabled.
-  await registerSlashCommands(config.APPLICATION_ID, config.DISCORD_TOKEN);
+  await registerSlashCommands(config.APPLICATION_ID, requireSecret("DISCORD_TOKEN"));
 
   const monitor = createMonitor(config.DB_PATH, serverConfig, client);
   log.info("Monitor feature enabled (config managed via /monitor config setup)");
@@ -129,7 +127,7 @@ async function main(): Promise<void> {
     log.info("bye");
   });
 
-  await client.login(config.DISCORD_TOKEN);
+  await client.login(requireSecret("DISCORD_TOKEN"));
 }
 
 main().catch((err) => logger.error(err));

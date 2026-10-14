@@ -2,7 +2,7 @@
  * Instagram profile feed: RapidAPI list + hydrate to PostData (no DB / seen state).
  */
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
-import config from "../../../config/config";
+import { requireSecret } from "../../../secrets";
 import logger from "../../../logger";
 import type { AnySnsMetadata, InstagramMetadata, PostData } from "../../../platforms/base";
 import { resolveInstagramUserId } from "../../../utils/instagramBestExperience";
@@ -159,7 +159,7 @@ async function listIgProfilePostsViaBestExperience(
     return parseRapidApiPostsResponse(mock);
   }
 
-  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, config.RAPID_API_KEY);
+  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, requireSecret("RAPID_API_KEY"));
 
   const req = new Request(
     `https://instagram-best-experience.p.rapidapi.com/feed?user_id=${resolvedUserId}`,
@@ -167,7 +167,7 @@ async function listIgProfilePostsViaBestExperience(
       method: "GET",
       headers: {
         "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
+        "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
       },
     },
   );
@@ -202,7 +202,7 @@ async function listIgProfilePostsViaScraperApi2(igUsername: string): Promise<Nor
   }
 
   return parseRapidApiPostsResponse(
-    await fetchUserPostsViaScraperApi2(igUsername, config.RAPID_API_KEY),
+    await fetchUserPostsViaScraperApi2(igUsername, requireSecret("RAPID_API_KEY")),
   );
 }
 
@@ -378,7 +378,7 @@ export async function fetchInstagramConnectionPosts(
   // Resolve once and share between profile + stories fetches to avoid
   // doubling /profile RapidAPI usage on every poll tick. Falls through to
   // undefined on failure — each fetch still resolves its own userId then.
-  const userId = await resolveInstagramUserId(igUsername, config.RAPID_API_KEY).catch(
+  const userId = await resolveInstagramUserId(igUsername, requireSecret("RAPID_API_KEY")).catch(
     (err) => {
       log.warn({ err, igUsername }, "Failed to pre-resolve Instagram user ID; falling back to per-call resolution");
       return undefined;

@@ -6,6 +6,7 @@ import {
   type MessageCreateOptions,
 } from "discord.js";
 import logger from "../../logger";
+import { requireSecret } from "../../secrets";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, KST_TIMEZONE, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { getFileExtFromURL, parseJsonPreservingBigIntKeys, tracedFetch } from "../../utils/http";
 import { convertHeicToJpeg } from "../../utils/heic";
@@ -84,14 +85,14 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
         method: "GET",
         headers: {
           "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+          "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
         },
       },
     );
   }
 
   private async listStoryItems(username: string): Promise<StoryItem[]> {
-    const apiKey = process.env.RAPID_API_KEY!;
+    const apiKey = requireSecret("RAPID_API_KEY");
     return tryWithFallbacks([
       {
         name: "RapidAPI instagram-best-experience /stories",
@@ -113,7 +114,7 @@ export class InstagramStoryDownloader extends SnsDownloader<InstagramMetadata> {
         method: "GET",
         headers: {
           "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+          "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
         },
       },
     );

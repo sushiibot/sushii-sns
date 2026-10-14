@@ -2,7 +2,7 @@
  * Instagram stories: list API + hydrate (no DB / seen state).
  */
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
-import config from "../../../config/config";
+import { requireSecret } from "../../../secrets";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import logger from "../../../logger";
 import { parseJsonPreservingBigIntKeys } from "../../../utils/http";
@@ -45,7 +45,7 @@ async function listInstagramStoryItems(igUsername: string, userId?: string): Pro
     },
     {
       name: "instagram-scraper-api2 /stories",
-      fn: () => fetchStoriesViaScraperApi2(igUsername, config.RAPID_API_KEY),
+      fn: () => fetchStoriesViaScraperApi2(igUsername, requireSecret("RAPID_API_KEY")),
     },
   ]);
 }
@@ -54,7 +54,7 @@ async function listInstagramStoryItemsViaBestExperience(
   igUsername: string,
   userId?: string,
 ): Promise<any[]> {
-  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, config.RAPID_API_KEY);
+  const resolvedUserId = userId ?? await resolveInstagramUserId(igUsername, requireSecret("RAPID_API_KEY"));
 
   const req = new Request(
     `https://instagram-best-experience.p.rapidapi.com/stories?user_id=${resolvedUserId}`,
@@ -62,7 +62,7 @@ async function listInstagramStoryItemsViaBestExperience(
       method: "GET",
       headers: {
         "x-rapidapi-host": "instagram-best-experience.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
+        "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
       },
     },
   );

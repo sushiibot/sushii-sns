@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import { ApiUsageEndpoint, recordApiUsage } from "../../apiUsage";
 import logger from "../../logger";
+import { requireSecret } from "../../secrets";
 import { chunkArray, formatDiscordTitle, itemsToMessageContents, MAX_ATTACHMENTS_PER_MESSAGE } from "../../utils/discord";
 import { buildLinksFormatMessages } from "../../utils/template";
 import { tracedFetch } from "../../utils/http";
@@ -54,7 +55,7 @@ export class TikTokDownloader extends SnsDownloader<TikTokMetadata> {
         method: "GET",
         headers: {
           "x-rapidapi-host": "tiktok-best-experience.p.rapidapi.com",
-          "x-rapidapi-key": process.env.RAPID_API_KEY!,
+          "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
         },
       },
     );

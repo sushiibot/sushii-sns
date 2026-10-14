@@ -1,16 +1,13 @@
 import * as dotenv from "dotenv";
 import pino from "pino";
 import { z } from "zod";
+import { assertRequiredSecrets } from "../secrets";
 
 dotenv.config();
 
 const schema = z.object({
   LOG_LEVEL: z.string().optional().default("info"),
-  DISCORD_TOKEN: z.string(),
   APPLICATION_ID: z.string(),
-
-  BD_API_TOKEN: z.string(),
-  RAPID_API_KEY: z.string(),
 
   CHANNEL_ID_WHITELIST: z
     .string()
@@ -26,17 +23,19 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 
-if (!parsed.success) {
+// Names and issue codes only: some zod messages echo the received value.
+const invalid = parsed.success
+  ? []
+  : parsed.error.issues.map((i) => `${i.path.join(".")} (${i.code})`);
+try {
+  assertRequiredSecrets();
+} catch (err) {
+  invalid.push((err as Error).message);
+}
+
+if (!parsed.success || invalid.length > 0) {
   // Temporary logger since we need the config to setup the real one
-  const logger = pino();
-
-  logger.error(
-    {
-      error: parsed.error.format(),
-    },
-    "❌ Invalid environment variables",
-  );
-
+  pino().error({ fields: invalid }, "❌ Invalid environment variables");
   process.exit(1);
 }
 

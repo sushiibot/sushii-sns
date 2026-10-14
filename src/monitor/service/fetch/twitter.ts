@@ -2,7 +2,7 @@
  * Twitter/X timeline: fetch JSON + hydrate tweet rows (no DB / seen state).
  */
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
-import config from "../../../config/config";
+import { requireSecret } from "../../../secrets";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { isDevMode, loadMockJson } from "../../runtime";
 import { selectUnseenSlice, type DownloadFilesFromUrls } from "../fetch";
@@ -34,7 +34,7 @@ async function fetchTwitterTimelineJson(handle: string): Promise<any> {
       headers: {
         "Content-Type": "application/json",
         "x-rapidapi-host": "twitter-api45.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
+        "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
       },
     },
   );

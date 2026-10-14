@@ -2,7 +2,7 @@
  * TikTok feed: fetch JSON + hydrate aweme/video rows (no DB / seen state).
  */
 import { ApiUsageEndpoint, recordApiUsage } from "../../../apiUsage";
-import config from "../../../config/config";
+import { requireSecret } from "../../../secrets";
 import logger from "../../../logger";
 import type { AnySnsMetadata, PostData } from "../../../platforms/base";
 import { tryWithFallbacks } from "../../../utils/fallback";
@@ -23,7 +23,7 @@ async function fetchTiktokBestExperienceJson(handle: string): Promise<any> {
       headers: {
         "Content-Type": "application/json",
         "x-rapidapi-host": "tiktok-best-experience.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
+        "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
       },
     },
   );
@@ -49,7 +49,7 @@ async function fetchTiktokApi6Json(handle: string): Promise<any> {
       headers: {
         "Content-Type": "application/json",
         "x-rapidapi-host": "tiktok-api6.p.rapidapi.com",
-        "x-rapidapi-key": config.RAPID_API_KEY,
+        "x-rapidapi-key": requireSecret("RAPID_API_KEY"),
       },
     },
   );
