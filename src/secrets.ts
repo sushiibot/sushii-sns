@@ -63,9 +63,12 @@ export function assertRequiredSecrets(loaded: Secrets = secrets): void {
   }
 }
 
-export function requireSecret(name: SecretName): string {
-  const value = secrets[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
+export function requireSecret(
+  name: SecretName,
+  loaded: Secrets = secrets,
+): string {
+  const value = loaded[name];
+  if (!value) throw new Error(`Missing required secrets: ${name}`);
   return value;
 }
 

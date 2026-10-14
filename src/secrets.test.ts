@@ -58,7 +58,7 @@ describe("loadSecrets", () => {
 });
 
 test("requireSecret names a missing variable", () => {
-  expect(() => requireSecret("BD_API_TOKEN")).toThrow(
-    "Missing required env var: BD_API_TOKEN",
+  expect(() => requireSecret("BD_API_TOKEN", loadSecrets({}))).toThrow(
+    "Missing required secrets: BD_API_TOKEN",
   );
 });
