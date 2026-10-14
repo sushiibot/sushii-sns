@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertRequiredSecrets, loadSecrets } from "./secrets";
+import { assertRequiredSecrets, loadSecrets, requireSecret } from "./secrets";
 
 describe("loadSecrets", () => {
   test("a missing required secret names the variable and never echoes a value", () => {
@@ -55,4 +55,10 @@ describe("loadSecrets", () => {
     expect(loaded.RAPID_API_KEY).toBeUndefined();
     expect(Object.isFrozen(loaded)).toBe(true);
   });
+});
+
+test("requireSecret names a missing variable", () => {
+  expect(() => requireSecret("BD_API_TOKEN")).toThrow(
+    "Missing required env var: BD_API_TOKEN",
+  );
 });
