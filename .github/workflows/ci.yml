@@ -27,36 +27,26 @@ jobs:
       - run: bun install
       - run: bun test
 
-  docker-build:
+  build:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: sushiibot/sushii-workflows/.github/workflows/docker-build.yml@main # zizmor: ignore[unpinned-uses] first-party, tracked at @main by design
-    with:
-      image_name: ghcr.io/sushiibot/sushii-sns
+    uses: sushiibot/sushii-workflows/.github/workflows/build-verified.yml@20fa6954e3c62b1137519e8790706116c5fffbe9
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
-  deploy:
-    needs: docker-build
+  release:
+    needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # apps deploys on its own (sushii-ansible roles/pull_deploy): this bumps the tag and waits for its
-    # status, which is mirrored onto this commit with a Grafana log link.
+    uses: sushiibot/sushii-workflows/.github/workflows/release-auto.yml@20fa6954e3c62b1137519e8790706116c5fffbe9
     permissions:
       contents: read
       actions: read
       statuses: write
-    uses: sushiibot/sushii-workflows/.github/workflows/release-auto.yml@86493aecc426db554f9f3f220225516c01a9c110 # release preset
+      id-token: write
+      attestations: write
     with:
-      image_version: ${{ needs.docker-build.outputs.image_version }}
-    secrets:
-      SUSHII_CI_PRIVATE_KEY: ${{ secrets.SUSHII_CI_PRIVATE_KEY }}
-
-  docker-cleanup:
-    needs: docker-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: sushiibot/sushii-workflows/.github/workflows/docker-cleanup.yml@main # zizmor: ignore[unpinned-uses] first-party, tracked at @main by design
-    with:
-      image_name: ghcr.io/sushiibot/sushii-sns
-    permissions:
-      packages: write
+      target: production
+      artifact_digest: ${{ needs.build.outputs.artifact_digest }}
