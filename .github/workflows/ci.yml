@@ -43,12 +43,12 @@ jobs:
     # apps deploys on its own (sushii-ansible roles/pull_deploy): this bumps the tag and waits for its
     # status, which is mirrored onto this commit with a Grafana log link.
     permissions:
+      contents: read
+      actions: read
       statuses: write
-    uses: sushiibot/sushii-workflows/.github/workflows/pull-deploy.yml@4246adf846f300a79038cbca1abbc432b720122a # pull-deploy
+    uses: sushiibot/sushii-workflows/.github/workflows/release-auto.yml@86493aecc426db554f9f3f220225516c01a9c110 # release preset
     with:
-      service: private-bots/sushii-sns
       image_version: ${{ needs.docker-build.outputs.image_version }}
-      host: apps
     secrets:
       SUSHII_CI_PRIVATE_KEY: ${{ secrets.SUSHII_CI_PRIVATE_KEY }}
 
