@@ -40,7 +40,7 @@ jobs:
   release:
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: sushiibot/sushii-workflows/.github/workflows/release-auto.yml@20fa6954e3c62b1137519e8790706116c5fffbe9
+    uses: sushiibot/sushii-workflows/.github/workflows/release-auto.yml@0f9f1d0e140398ba9396166269557cdc660507ec
     permissions:
       contents: read
       actions: read
@@ -50,3 +50,5 @@ jobs:
     with:
       target: production
       artifact_digest: ${{ needs.build.outputs.artifact_digest }}
+    secrets:
+      SUSHII_CI_PRIVATE_KEY: ${{ secrets.SUSHII_CI_PRIVATE_KEY }}
