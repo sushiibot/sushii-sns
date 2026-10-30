@@ -14,7 +14,6 @@ const schema = z.object({
     .transform((s) => s.split(",").map((s) => s.trim()))
     .default(""),
 
-  SENTRY_DSN: z.string().optional(),
 
   SERVER_CONFIG_PATH: z.string().optional(),
 

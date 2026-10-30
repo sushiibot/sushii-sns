@@ -62,7 +62,6 @@ See [monitor-feature.md](./monitor-feature.md) for config shape.
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `LOG_LEVEL` | `info` | |
-| `SENTRY_DSN` | — | Error tracking |
 | `SERVER_CONFIG_PATH` | — | Guild routing / feature flags |
 | `MONITORS_CONFIG_PATH` | — | Enables monitor + slash commands beyond `/usage` |
 | `DB_PATH` | `./data.db` | Metadata DB; connection DBs live alongside |
