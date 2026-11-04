@@ -38,7 +38,7 @@
     "@opentelemetry/sdk-trace-base": "^2.6.1",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "dayjs": "^1.11.13",
-    "discord.js": "^14.25.1",
+    "discord.js": "^14.28.1",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.13",
